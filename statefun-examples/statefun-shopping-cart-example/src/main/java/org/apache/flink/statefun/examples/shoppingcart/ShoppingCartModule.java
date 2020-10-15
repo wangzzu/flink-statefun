@@ -32,22 +32,21 @@ public class ShoppingCartModule implements StatefulFunctionModule {
 
   @Override
   public void configure(Map<String, String> globalConfiguration, Binder binder) {
+    // bind ingress
+    IngressSpec<ProtobufMessages.AddToCart> addToCartSpec =
+        KafkaIngressBuilder.forIdentifier(Identifiers.ADD_TO_CART).build();
+    binder.bindIngress(addToCartSpec);
+
+    // bind ingress router
+    binder.bindIngressRouter(Identifiers.ADD_TO_CART, new AddToCartRouter());
+
     // bind functions
     binder.bindFunctionProvider(Identifiers.CART, unused -> new UserShoppingCart());
     binder.bindFunctionProvider(Identifiers.INVENTORY, unused -> new Inventory());
 
-    // For ingress and egress pretend I filled in the details :)
-
-    IngressSpec<ProtobufMessages.AddToCart> addToCartSpec =
-        KafkaIngressBuilder.forIdentifier(Identifiers.ADD_TO_CART).build();
-
-    binder.bindIngress(addToCartSpec);
-
-    binder.bindIngressRouter(Identifiers.ADD_TO_CART, new AddToCartRouter());
-
+    // bind egress
     EgressSpec<ProtobufMessages.AddToCartResult> addtoCartResultSpec =
         KafkaEgressBuilder.forIdentifier(Identifiers.ADD_TO_CART_RESULT).build();
-
     binder.bindEgress(addtoCartResultSpec);
   }
 }
