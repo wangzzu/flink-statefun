@@ -20,10 +20,10 @@ package org.apache.flink.statefun.examples.shoppingcart;
 import org.apache.flink.statefun.examples.shoppingcart.generated.ProtobufMessages;
 import org.apache.flink.statefun.sdk.io.Router;
 
-final class RestockRouter implements Router<ProtobufMessages.RestockItem> {
+final class AddToCartRouter implements Router<ProtobufMessages.AddToCart> {
   @Override
   public void route(
-      ProtobufMessages.RestockItem message, Downstream<ProtobufMessages.RestockItem> downstream) {
-    downstream.forward(Identifiers.INVENTORY, message.getItemId(), message);
+      ProtobufMessages.AddToCart message, Downstream<ProtobufMessages.AddToCart> downstream) {
+    downstream.forward(Identifiers.CART, message.getUserId(), message);
   }
 }

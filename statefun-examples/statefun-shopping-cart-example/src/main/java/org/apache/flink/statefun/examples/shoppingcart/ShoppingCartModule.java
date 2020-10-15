@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.flink.statefun.examples.shoppingcart;
 
 import com.google.auto.service.AutoService;
@@ -28,24 +29,25 @@ import org.apache.flink.statefun.sdk.spi.StatefulFunctionModule;
 
 @AutoService(StatefulFunctionModule.class)
 public class ShoppingCartModule implements StatefulFunctionModule {
+
   @Override
   public void configure(Map<String, String> globalConfiguration, Binder binder) {
     // bind functions
-    binder.bindFunctionProvider(Identifiers.USER, unused -> new UserShoppingCart());
+    binder.bindFunctionProvider(Identifiers.CART, unused -> new UserShoppingCart());
     binder.bindFunctionProvider(Identifiers.INVENTORY, unused -> new Inventory());
 
     // For ingress and egress pretend I filled in the details :)
 
-    IngressSpec<ProtobufMessages.RestockItem> restockSpec =
-        KafkaIngressBuilder.forIdentifier(Identifiers.RESTOCK).build();
+    IngressSpec<ProtobufMessages.AddToCart> addToCartSpec =
+        KafkaIngressBuilder.forIdentifier(Identifiers.ADD_TO_CART).build();
 
-    binder.bindIngress(restockSpec);
+    binder.bindIngress(addToCartSpec);
 
-    binder.bindIngressRouter(Identifiers.RESTOCK, new RestockRouter());
+    binder.bindIngressRouter(Identifiers.ADD_TO_CART, new AddToCartRouter());
 
-    EgressSpec<ProtobufMessages.Receipt> receiptSpec =
-        KafkaEgressBuilder.forIdentifier(Identifiers.RECEIPT).build();
+    EgressSpec<ProtobufMessages.AddToCartResult> addtoCartResultSpec =
+        KafkaEgressBuilder.forIdentifier(Identifiers.ADD_TO_CART_RESULT).build();
 
-    binder.bindEgress(receiptSpec);
+    binder.bindEgress(addtoCartResultSpec);
   }
 }

@@ -15,12 +15,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.flink.statefun.examples.shoppingcart;
 
-import java.util.Map;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 import org.apache.flink.statefun.examples.shoppingcart.generated.ProtobufMessages;
+import org.apache.flink.statefun.examples.shoppingcart.generated.ProtobufMessages.AddToCartResult.Type;
 import org.apache.flink.statefun.sdk.Address;
 import org.apache.flink.statefun.sdk.Context;
 import org.apache.flink.statefun.sdk.StatefulFunction;
@@ -30,8 +29,8 @@ import org.apache.flink.statefun.sdk.state.PersistedTable;
 final class UserShoppingCart implements StatefulFunction {
 
   @Persisted
-  private final PersistedTable<String, Integer> userBasket =
-      PersistedTable.of("basket", String.class, Integer.class);
+  private final PersistedTable<String, Integer> cartItems =
+      PersistedTable.of("cart-items", String.class, Integer.class);
 
   @Override
   public void invoke(Context context, Object input) {
@@ -43,44 +42,32 @@ final class UserShoppingCart implements StatefulFunction {
       context.send(address, request);
     }
 
-    if (input instanceof ProtobufMessages.ItemAvailability) {
-      ProtobufMessages.ItemAvailability availability = (ProtobufMessages.ItemAvailability) input;
+    if (input instanceof ProtobufMessages.ItemReserved) {
+      ProtobufMessages.ItemReserved itemReserved = (ProtobufMessages.ItemReserved) input;
 
-      if (availability.getStatus() == ProtobufMessages.ItemAvailability.Status.INSTOCK) {
-        userBasket.set(context.caller().id(), availability.getQuantity());
-      }
-    }
+      cartItems.set(itemReserved.getId(), itemReserved.getQuantity());
 
-    if (input instanceof ProtobufMessages.ClearCart) {
-      for (Map.Entry<String, Integer> entry : userBasket.entries()) {
-        ProtobufMessages.RestockItem item =
-            ProtobufMessages.RestockItem.newBuilder()
-                .setItemId(entry.getKey())
-                .setQuantity(entry.getValue())
-                .build();
-
-        Address address = new Address(Identifiers.INVENTORY, entry.getKey());
-        context.send(address, item);
-      }
-
-      userBasket.clear();
-    }
-
-    if (input instanceof ProtobufMessages.Checkout) {
-
-      String items =
-          StreamSupport.stream(userBasket.entries().spliterator(), false)
-              .map(entry -> entry.getKey() + ": " + entry.getValue())
-              .collect(Collectors.joining("\n"));
-
-      ProtobufMessages.Receipt receipt =
-          ProtobufMessages.Receipt.newBuilder()
-              .setUserId(context.self().id())
-              .setDetails(items)
+      ProtobufMessages.AddToCartResult addToCartResult =
+          ProtobufMessages.AddToCartResult.newBuilder()
+              .setType(Type.SUCCESS)
+              .setItemId(itemReserved.getId())
+              .setQuantity(itemReserved.getQuantity())
               .build();
 
-      context.send(Identifiers.RECEIPT, receipt);
-      userBasket.clear();
+      context.send(Identifiers.ADD_TO_CART_RESULT, addToCartResult);
+    }
+
+    if (input instanceof ProtobufMessages.ItemUnavailable) {
+      ProtobufMessages.ItemUnavailable itemUnavailable = (ProtobufMessages.ItemUnavailable) input;
+
+      ProtobufMessages.AddToCartResult addToCartResult =
+          ProtobufMessages.AddToCartResult.newBuilder()
+              .setType(Type.FAIL)
+              .setItemId(itemUnavailable.getId())
+              .setQuantity(itemUnavailable.getQuantity())
+              .build();
+
+      context.send(Identifiers.ADD_TO_CART_RESULT, addToCartResult);
     }
   }
 }

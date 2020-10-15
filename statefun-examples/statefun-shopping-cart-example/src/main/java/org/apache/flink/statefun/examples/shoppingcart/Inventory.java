@@ -26,29 +26,28 @@ import org.apache.flink.statefun.sdk.state.PersistedValue;
 final class Inventory implements StatefulFunction {
 
   @Persisted
-  private final PersistedValue<Integer> inventory = PersistedValue.of("inventory", Integer.class);
+  private final PersistedValue<Integer> reserveNum = PersistedValue.of("reserveNum", Integer.class);
+
+  @Persisted
+  private final PersistedValue<Integer> stockNum = PersistedValue.of("stockNum", Integer.class);
 
   @Override
   public void invoke(Context context, Object message) {
-    if (message instanceof ProtobufMessages.RestockItem) {
-      int quantity =
-          inventory.getOrDefault(0) + ((ProtobufMessages.RestockItem) message).getQuantity();
-      inventory.set(quantity);
-    } else if (message instanceof ProtobufMessages.RequestItem) {
-      int quantity = inventory.getOrDefault(0);
+    if (message instanceof ProtobufMessages.RequestItem) {
       int requestedAmount = ((ProtobufMessages.RequestItem) message).getQuantity();
+      if (stockNum.getOrDefault(0) >= requestedAmount ) {
+        stockNum.set(stockNum.getOrDefault(0) - requestedAmount);
+        reserveNum.set(reserveNum.getOrDefault(0) + requestedAmount);
 
-      ProtobufMessages.ItemAvailability.Builder availability =
-          ProtobufMessages.ItemAvailability.newBuilder().setQuantity(requestedAmount);
+        ProtobufMessages.ItemReserved.Builder itemReserved =
+            ProtobufMessages.ItemReserved.newBuilder().setQuantity(reserveNum.getOrDefault(0));
 
-      if (quantity >= requestedAmount) {
-        inventory.set(quantity - requestedAmount);
-        availability.setStatus(ProtobufMessages.ItemAvailability.Status.INSTOCK);
+        context.send(context.caller(), itemReserved);
       } else {
-        availability.setStatus(ProtobufMessages.ItemAvailability.Status.OUTOFSTOCK);
+        ProtobufMessages.ItemUnavailable.Builder unavailability =
+            ProtobufMessages.ItemUnavailable.newBuilder().setQuantity(requestedAmount);
+        context.send(context.caller(), unavailability);
       }
-
-      context.send(context.caller(), availability.build());
     }
   }
 }

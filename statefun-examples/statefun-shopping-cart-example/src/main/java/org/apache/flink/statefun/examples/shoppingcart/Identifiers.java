@@ -26,13 +26,13 @@ final class Identifiers {
 
   private Identifiers() {}
 
-  static final FunctionType USER = new FunctionType("shopping-cart", "user");
+  static final FunctionType CART = new FunctionType("shopping-cart", "cart");
 
   static final FunctionType INVENTORY = new FunctionType("shopping-cart", "inventory");
 
-  static final IngressIdentifier<ProtobufMessages.RestockItem> RESTOCK =
-      new IngressIdentifier<>(ProtobufMessages.RestockItem.class, "shopping-cart", "restock-item");
+  static final IngressIdentifier<ProtobufMessages.AddToCart> ADD_TO_CART =
+      new IngressIdentifier<>(ProtobufMessages.AddToCart.class, "shopping-cart", "add-to-cart");
 
-  static final EgressIdentifier<ProtobufMessages.Receipt> RECEIPT =
-      new EgressIdentifier<>("shopping-cart", "receipt", ProtobufMessages.Receipt.class);
+  static final EgressIdentifier<ProtobufMessages.AddToCartResult> ADD_TO_CART_RESULT =
+      new EgressIdentifier<>("shopping-cart", "AddToCartResult", ProtobufMessages.AddToCartResult.class);
 }
