@@ -249,6 +249,7 @@ final class FunctionJsonEntity implements JsonEntity {
     return toMap(FunctionSpec::functionType, Function.identity());
   }
 
+  // note: 根据 function type 选择对应的 FunctionProvider
   private static StatefulFunctionProvider functionProvider(
       Kind kind, Map<FunctionType, FunctionSpec> definedFunctions) {
     switch (kind) {

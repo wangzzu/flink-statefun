@@ -29,6 +29,7 @@ public final class StatefulFunctionsUniverses {
   private static final Map<ClassLoader, StatefulFunctionsUniverse> universes =
       synchronizedMap(new WeakHashMap<>());
 
+  // note: 获取 stateFun
   public static StatefulFunctionsUniverse get(
       ClassLoader classLoader, StatefulFunctionsConfig configuration) {
     Preconditions.checkState(classLoader != null, "The class loader was not set.");
@@ -53,7 +54,9 @@ public final class StatefulFunctionsUniverses {
     @Override
     public StatefulFunctionsUniverse get(
         ClassLoader classLoader, StatefulFunctionsConfig configuration) {
+      // note: 1. load modules
       Modules modules = Modules.loadFromClassPath();
+      // note: 2. create StateFun Universe
       return modules.createStatefulFunctionsUniverse(configuration);
     }
   }

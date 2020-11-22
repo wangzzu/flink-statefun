@@ -25,6 +25,7 @@ import org.apache.flink.statefun.sdk.kafka.Constants;
 @AutoService(FlinkIoModule.class)
 public final class KafkaFlinkIoModule implements FlinkIoModule {
 
+  // note: 通过 SPI 机制加载
   @Override
   public void configure(Map<String, String> globalConfiguration, Binder binder) {
     binder.bindSourceProvider(Constants.KAFKA_INGRESS_TYPE, new KafkaSourceProvider());

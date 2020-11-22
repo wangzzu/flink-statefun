@@ -32,6 +32,7 @@ import org.apache.flink.statefun.sdk.state.TableAccessor;
 /**
  * A {@link StateBinder} that binds persisted state objects to Flink state for a specific {@link
  * FunctionType}.
+ * note: persisted state 绑定到 flink 的 state 上
  */
 public final class FlinkStateBinder extends StateBinder {
   private final State state;

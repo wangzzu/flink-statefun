@@ -41,6 +41,7 @@ import org.apache.flink.util.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+// note: router 也会转换为一个 Operator
 public final class IngressRouterOperator<T> extends AbstractStreamOperator<Message>
     implements OneInputStreamOperator<T, Message> {
 

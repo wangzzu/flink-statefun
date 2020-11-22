@@ -23,6 +23,7 @@ import org.apache.flink.statefun.flink.core.message.MessageFactory;
 import org.apache.flink.statefun.flink.core.metrics.FunctionTypeMetrics;
 import org.apache.flink.statefun.sdk.Context;
 
+// note: stateful function 的调用逻辑
 final class StatefulFunction implements LiveFunction {
   private final org.apache.flink.statefun.sdk.StatefulFunction statefulFunction;
   private final FunctionTypeMetrics metrics;
@@ -45,6 +46,7 @@ final class StatefulFunction implements LiveFunction {
       ClassLoader targetClassLoader = statefulFunction.getClass().getClassLoader();
       Thread.currentThread().setContextClassLoader(targetClassLoader);
       Object payload = message.payload(messageFactory, targetClassLoader);
+      // note: function invoke
       statefulFunction.invoke(context, payload);
     } catch (Exception e) {
       throw new StatefulFunctionInvocationException(context.self().type(), e);

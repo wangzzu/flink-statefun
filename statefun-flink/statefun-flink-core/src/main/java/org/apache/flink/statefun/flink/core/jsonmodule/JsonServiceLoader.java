@@ -31,6 +31,7 @@ import org.apache.flink.statefun.flink.common.json.Selectors;
 import org.apache.flink.statefun.flink.core.spi.Constants;
 import org.apache.flink.statefun.sdk.spi.StatefulFunctionModule;
 
+// note: yaml 配置文件解析，yaml 最后也是会生成一个 module
 public final class JsonServiceLoader {
 
   private static final JsonPointer FORMAT_VERSION = JsonPointer.compile("/version");
@@ -40,6 +41,7 @@ public final class JsonServiceLoader {
   public static Iterable<StatefulFunctionModule> load() {
     ObjectMapper mapper = mapper();
 
+    // note: module.yaml 的 yaml 文件
     Iterable<URL> namedResources =
         ResourceLocator.findNamedResources("classpath:" + Constants.STATEFUL_FUNCTIONS_MODULE_NAME);
 

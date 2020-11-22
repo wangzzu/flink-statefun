@@ -64,6 +64,7 @@ final class StatefulFunctionRepository implements FunctionRepository {
         functionLoader.load(functionType);
     try (SetContextClassLoader ignored = new SetContextClassLoader(statefulFunction)) {
       FlinkStateBinder stateBinderForType = new FlinkStateBinder(flinkState, functionType);
+      // note: 通过反射找到具体的 state，并进行绑定
       PersistedStates.findReflectivelyAndBind(statefulFunction, stateBinderForType);
       FunctionTypeMetrics metrics = metricsFactory.forType(functionType);
       return new StatefulFunction(statefulFunction, metrics, messageFactory);

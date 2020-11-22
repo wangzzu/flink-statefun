@@ -49,6 +49,7 @@ public final class GreetingModule implements StatefulFunctionModule {
     binder.bindEgress(ioModule.getEgressSpec());
 
     // bind a function provider to a function type
+    // note: provider 可以决定这个 function 交互方式，可以使 HTTP 或 GRPC 的形式
     binder.bindFunctionProvider(GreetStatefulFunction.TYPE, unused -> new GreetStatefulFunction());
   }
 }

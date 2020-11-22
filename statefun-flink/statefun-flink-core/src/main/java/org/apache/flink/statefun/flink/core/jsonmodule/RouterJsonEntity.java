@@ -34,6 +34,7 @@ import org.apache.flink.statefun.sdk.io.IngressIdentifier;
 import org.apache.flink.statefun.sdk.io.Router;
 import org.apache.flink.statefun.sdk.spi.StatefulFunctionModule.Binder;
 
+// note: route 的信息
 final class RouterJsonEntity implements JsonEntity {
 
   private static final JsonPointer ROUTER_SPECS_POINTER = JsonPointer.compile("/routers");
@@ -60,6 +61,7 @@ final class RouterJsonEntity implements JsonEntity {
           // dynamicMessage
           // router once we will introduce further router types we should refactor this to be more
           // dynamic.
+          // note: 当前只有 PB Msg 这种格式在 module.yaml 是支持的
           requireProtobufRouterType(routerNode);
 
           binder.bindIngressRouter(targetRouterIngress(routerNode), dynamicRouter(routerNode));
@@ -106,11 +108,13 @@ final class RouterJsonEntity implements JsonEntity {
   }
 
   private static IngressIdentifier<Message> targetRouterIngress(JsonNode routerNode) {
+    // note: route 绑定的 Ingress
     String targetIngress = Selectors.textAt(routerNode, SpecPointers.INGRESS);
     NamespaceNamePair nn = NamespaceNamePair.from(targetIngress);
     return new IngressIdentifier<>(Message.class, nn.namespace(), nn.name());
   }
 
+  //note: 根据 PB 格式做路由
   private static void requireProtobufRouterType(JsonNode routerNode) {
     String routerType = Selectors.textAt(routerNode, MetaPointers.TYPE);
     if (!routerType.equalsIgnoreCase("org.apache.flink.statefun.sdk/protobuf-router")) {

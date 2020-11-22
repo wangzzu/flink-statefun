@@ -26,5 +26,6 @@ public interface StatefulFunctionProvider {
    * @param type the type of function to create an instance for.
    * @return an instance of a function for the given type.
    */
+  // note: 创建一个 function
   StatefulFunction functionOfType(FunctionType type);
 }

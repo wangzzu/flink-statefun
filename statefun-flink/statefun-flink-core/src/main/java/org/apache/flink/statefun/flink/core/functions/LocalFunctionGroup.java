@@ -45,21 +45,29 @@ final class LocalFunctionGroup {
   }
 
   void enqueue(Message message) {
+    // note: 这里会根据 address 选择对应的 function
     FunctionActivation activation = activeFunctions.get(message.target());
+
+    // note: 如果 action 不存在，这里会新创建一个 action
     if (activation == null) {
       activation = newActivation(message.target());
       pending.addLast(activation);
     }
+    // note: msg 放到这个 activation 中
     activation.add(message);
   }
 
+  // note: 执行相应的 function
   boolean processNextEnvelope() {
     FunctionActivation activation = pending.pollFirst();
     if (activation == null) {
       return false;
     }
+
+    // note: 处理这个 activation next msg（可能这个 action 中很多的 msg 在排队处理）
     activation.applyNextPendingEnvelope(context);
     if (activation.hasPendingEnvelope()) {
+      // note: 如果有正在处理的 action，这里会存在缓存中
       pending.addLast(activation);
     } else {
       activeFunctions.remove(activation.self());
@@ -70,6 +78,7 @@ final class LocalFunctionGroup {
   }
 
   private FunctionActivation newActivation(Address self) {
+    // note: 根据 Function type 获取对应的 function
     LiveFunction function = repository.get(self.type());
     FunctionActivation activation = pool.get();
     activation.setFunction(self, function);

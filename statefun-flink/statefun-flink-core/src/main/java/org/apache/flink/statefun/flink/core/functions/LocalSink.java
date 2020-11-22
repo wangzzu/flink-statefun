@@ -31,6 +31,7 @@ final class LocalSink {
     this.functionGroup = Objects.requireNonNull(functionGroup);
   }
 
+  // note: 加到当前
   void accept(Message message) {
     Objects.requireNonNull(message);
     functionGroup.get().enqueue(message);

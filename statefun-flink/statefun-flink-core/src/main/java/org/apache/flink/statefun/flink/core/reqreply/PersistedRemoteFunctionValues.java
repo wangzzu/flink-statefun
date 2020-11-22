@@ -52,6 +52,7 @@ public final class PersistedRemoteFunctionValues {
     getStateHandleOrThrow(stateName).clear();
   }
 
+  // note: 绑定对应的 state
   private void createAndRegisterValueState(StateSpec stateSpec) {
     final String stateName = stateSpec.name();
 

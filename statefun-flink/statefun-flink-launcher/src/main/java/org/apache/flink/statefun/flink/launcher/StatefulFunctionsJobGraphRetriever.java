@@ -70,6 +70,7 @@ final class StatefulFunctionsJobGraphRetriever implements JobGraphRetriever {
     this.programArguments = requireNonNull(programArguments, "programArguments");
   }
 
+  // note: ModuleSpecs add classpath 中
   private static List<URL> obtainModuleAdditionalClassPath() {
     try {
       ModuleSpecs specs = ModuleSpecs.fromPath(Constants.MODULE_DIRECTORY);

@@ -49,6 +49,7 @@ public final class PersistedStateRegistry {
   /**
    * Registers a {@link PersistedValue}. If a registered state already exists for the specified name
    * of the value, the registration fails.
+   * note: register PersistedValue
    *
    * @param valueState the value state to register.
    * @param <T> the type of the value.
@@ -86,6 +87,7 @@ public final class PersistedStateRegistry {
   /**
    * Binds this state registry to a given function. All existing registered state in this registry
    * will also be bound to the system.
+   * note: 将所有的 state 绑定到具体的 function 上
    *
    * @param stateBinder the new fault-tolerant state binder to use.
    * @throws IllegalStateException if the registry was attempted to be bound more than once.
@@ -101,6 +103,7 @@ public final class PersistedStateRegistry {
     }
 
     this.stateBinder = Objects.requireNonNull(stateBinder);
+    // note: 注册这些 state
     registeredStates.values().forEach(stateBinder::bind);
   }
 

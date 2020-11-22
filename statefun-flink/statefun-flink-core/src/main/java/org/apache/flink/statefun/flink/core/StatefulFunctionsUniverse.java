@@ -39,6 +39,7 @@ import org.apache.flink.statefun.sdk.io.IngressSpec;
 import org.apache.flink.statefun.sdk.io.Router;
 import org.apache.flink.statefun.sdk.spi.StatefulFunctionModule;
 
+// note: stateFun universe，stateFun 应用的核心
 public final class StatefulFunctionsUniverse
     implements StatefulFunctionModule.Binder, FlinkIoModule.Binder {
 

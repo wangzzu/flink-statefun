@@ -33,6 +33,7 @@ public class ApiExtension {
     persistedAppendingBuffer.setAccessor(accessor);
   }
 
+  // note: PersistedState 注册
   public static void bindPersistedStateRegistry(
       PersistedStateRegistry persistedStateRegistry, StateBinder stateBinder) {
     persistedStateRegistry.bind(stateBinder);

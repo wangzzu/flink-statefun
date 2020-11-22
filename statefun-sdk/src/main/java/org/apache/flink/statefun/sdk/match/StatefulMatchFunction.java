@@ -28,6 +28,7 @@ import org.apache.flink.statefun.sdk.StatefulFunction;
  *
  * @see MatchBinder
  */
+// note: 处理多种 msg 类型时，可以使用这个 function，如果输入 msg 类型时固定，直接继承 StatefulFunction 即可
 public abstract class StatefulMatchFunction implements StatefulFunction {
 
   private boolean setup = false;
@@ -36,11 +37,13 @@ public abstract class StatefulMatchFunction implements StatefulFunction {
 
   /**
    * Configures the patterns to match for the function's inputs.
+   * note： 为不同的 msg 类型配置不同的处理方法
    *
    * @param binder a {@link MatchBinder} to bind patterns on.
    */
   public abstract void configure(MatchBinder binder);
 
+  // note: 这里会根据 msg 类型选择对应的处理方法来处理
   @Override
   public final void invoke(Context context, Object input) {
     ensureInitialized();

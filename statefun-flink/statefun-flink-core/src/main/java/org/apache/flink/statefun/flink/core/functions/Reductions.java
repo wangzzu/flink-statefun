@@ -125,7 +125,9 @@ final class Reductions {
   }
 
   void apply(Message message) {
+    // note: state 访问
     enqueue(message);
+    // note: 处理，这里会调用 function 的 process 方法来处理
     processEnvelopes();
   }
 
@@ -141,6 +143,7 @@ final class Reductions {
 
   @SuppressWarnings("StatementWithEmptyBody")
   void processEnvelopes() {
+    // note: 这里需要把 msg queue 中的数据处理完
     while (localFunctionGroup.processNextEnvelope()) {
       // TODO: consider preemption if too many local messages.
     }

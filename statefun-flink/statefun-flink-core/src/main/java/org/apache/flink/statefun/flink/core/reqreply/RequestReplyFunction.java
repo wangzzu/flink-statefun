@@ -42,8 +42,10 @@ import org.apache.flink.statefun.sdk.io.EgressIdentifier;
 import org.apache.flink.statefun.sdk.state.PersistedAppendingBuffer;
 import org.apache.flink.statefun.sdk.state.PersistedValue;
 
+// note: 使用 HTTP/GRPC 这种形式时，抽象的一个 StatefulFunction
 public final class RequestReplyFunction implements StatefulFunction {
 
+  // note: http client
   private final RequestReplyClient client;
   private final int maxNumBatchRequests;
 
@@ -77,6 +79,7 @@ public final class RequestReplyFunction implements StatefulFunction {
     this.maxNumBatchRequests = maxNumBatchRequests;
   }
 
+  // note: funtion process
   @Override
   public void invoke(Context context, Object input) {
     if (!(input instanceof AsyncOperationResult)) {
@@ -86,13 +89,16 @@ public final class RequestReplyFunction implements StatefulFunction {
     @SuppressWarnings("unchecked")
     AsyncOperationResult<ToFunction, FromFunction> result =
         (AsyncOperationResult<ToFunction, FromFunction>) input;
+    // note: process
     onAsyncResult(context, result);
   }
 
+  // note: 非异步处理，这里直接进行处理
   private void onRequest(Context context, Any message) {
     Invocation.Builder invocationBuilder = singeInvocationBuilder(context, message);
     int inflightOrBatched = requestState.getOrDefault(-1);
     if (inflightOrBatched < 0) {
+      // note: 直接进行计算
       // no inflight requests, and nothing in the batch.
       // so we let this request to go through, and change state to indicate that:
       // a) there is a request in flight.
@@ -101,6 +107,7 @@ public final class RequestReplyFunction implements StatefulFunction {
       sendToFunction(context, invocationBuilder);
       return;
     }
+    // note: batch 处理机制
     // there is at least one request in flight (inflightOrBatched >= 0),
     // so we add that request to the batch.
     batch.append(invocationBuilder.build());
@@ -123,6 +130,7 @@ public final class RequestReplyFunction implements StatefulFunction {
       return;
     }
     InvocationResponse invocationResult = unpackInvocationOrThrow(context.self(), asyncResult);
+    // note: 具体的逻辑处理
     handleInvocationResponse(context, invocationResult);
 
     final int state = requestState.getOrDefault(-1);
@@ -167,6 +175,7 @@ public final class RequestReplyFunction implements StatefulFunction {
     handleOutgoingMessages(context, invocationResult);
     handleOutgoingDelayedMessages(context, invocationResult);
     handleEgressMessages(context, invocationResult);
+    // note: state 的处理
     handleStateMutations(invocationResult);
   }
 
@@ -203,6 +212,7 @@ public final class RequestReplyFunction implements StatefulFunction {
   // State Management
   // --------------------------------------------------------------------------------
 
+  // note: 获取当前的 state 信息，返回给 remote function
   private void addStates(ToFunction.InvocationBatchRequest.Builder batchBuilder) {
     managedStates.forEach(
         (stateName, stateValue) -> {
@@ -216,6 +226,7 @@ public final class RequestReplyFunction implements StatefulFunction {
         });
   }
 
+  // note: HTTP 中处理 state
   private void handleStateMutations(InvocationResponse invocationResult) {
     for (FromFunction.PersistedValueMutation mutate : invocationResult.getStateMutationsList()) {
       final String stateName = mutate.getStateName();

@@ -63,7 +63,9 @@ public final class FunctionsStateBootstrapOperator
   public void initializeState(StateInitializationContext context) throws Exception {
     super.initializeState(context);
 
+    // note: state accessor
     final State stateAccessor = createStateAccessor(getRuntimeContext(), getKeyedStateBackend());
+    // note: state bind
     this.stateBootstrapper = new StateBootstrapper(stateBootstrapFunctionRegistry, stateAccessor);
   }
 

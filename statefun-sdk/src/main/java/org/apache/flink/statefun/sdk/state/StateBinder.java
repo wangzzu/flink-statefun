@@ -18,6 +18,8 @@
 
 package org.apache.flink.statefun.sdk.state;
 
+// note: state binder
+// note: 根据 stateObject 的类型绑定到具体的 对象上
 public abstract class StateBinder {
   public abstract void bindValue(PersistedValue<?> persistedValue);
 

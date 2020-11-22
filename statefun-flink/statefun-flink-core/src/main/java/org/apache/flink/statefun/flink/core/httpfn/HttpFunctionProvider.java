@@ -48,6 +48,8 @@ public class HttpFunctionProvider implements StatefulFunctionProvider {
     if (spec == null) {
       throw new IllegalArgumentException("Unsupported type " + type);
     }
+    // note: remote 模式下，会创建 RequestReplyFunction 的 function
+    // note: 这里在注册时，在将 state 进行注册
     return new RequestReplyFunction(
         new PersistedRemoteFunctionValues(spec.states()),
         spec.maxNumBatchRequests(),

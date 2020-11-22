@@ -141,6 +141,7 @@ public final class StatefulFunctionsClusterEntryPoint extends JobClusterEntrypoi
         CoreOptions.ALWAYS_PARENT_FIRST_LOADER_PATTERNS_ADDITIONAL, parentFirst);
   }
 
+  // note: 在这里会用到 StatefulFunctionsJob，相当于最后把 user jar 的 mainclass 改为 StatefulFunctionsJob 这个类
   @Override
   protected DispatcherResourceManagerComponentFactory
       createDispatcherResourceManagerComponentFactory(Configuration configuration) {

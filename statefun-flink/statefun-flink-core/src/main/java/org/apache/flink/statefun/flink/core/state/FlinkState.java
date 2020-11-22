@@ -42,6 +42,7 @@ import org.apache.flink.statefun.sdk.state.PersistedTable;
 import org.apache.flink.statefun.sdk.state.PersistedValue;
 import org.apache.flink.statefun.sdk.state.TableAccessor;
 
+// note: Flink state handle
 public final class FlinkState implements State {
 
   private final RuntimeContext runtimeContext;
@@ -70,6 +71,7 @@ public final class FlinkState implements State {
     return new FlinkValueAccessor<>(handle);
   }
 
+  // note: 注册一个 Flink 的 state
   @Override
   public <K, V> TableAccessor<K, V> createFlinkStateTableAccessor(
       FunctionType functionType, PersistedTable<K, V> persistedTable) {
@@ -97,6 +99,7 @@ public final class FlinkState implements State {
     return new FlinkAppendingBufferAccessor<>(handle);
   }
 
+  // note: 当前的 key 是用的 address 中 id
   @Override
   public void setCurrentKey(Address address) {
     keyedStateBackend.setCurrentKey(KeyBy.apply(address));

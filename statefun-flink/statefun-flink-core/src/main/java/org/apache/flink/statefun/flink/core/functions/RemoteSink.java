@@ -31,6 +31,7 @@ final class RemoteSink {
     this.record = new StreamRecord<>(null);
   }
 
+  // note: 通过 flink 发送出去，这里是发送到下游的 feedback 节点
   void accept(Message envelope) {
     Objects.requireNonNull(envelope);
     output.collect(record.replace(envelope));

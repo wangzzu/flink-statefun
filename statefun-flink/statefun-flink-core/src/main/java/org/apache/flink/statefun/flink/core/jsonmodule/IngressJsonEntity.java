@@ -42,6 +42,7 @@ final class IngressJsonEntity implements JsonEntity {
 
   @Override
   public void bind(Binder binder, JsonNode moduleSpecRootNode, FormatVersion formatVersion) {
+    //note: 先出 Ingress 节点
     final Iterable<? extends JsonNode> ingressNodes =
         Selectors.listAt(moduleSpecRootNode, INGRESS_SPECS_POINTER);
 
@@ -51,6 +52,7 @@ final class IngressJsonEntity implements JsonEntity {
           final IngressType type = ingressType(ingressNode);
 
           binder.bindIngress(new JsonIngressSpec<>(type, id, ingressNode));
+          // note: ingress 与 router 绑定
           if (isAutoRoutableIngress(type)) {
             binder.bindIngressRouter(id, new AutoRoutableProtobufRouter());
           }

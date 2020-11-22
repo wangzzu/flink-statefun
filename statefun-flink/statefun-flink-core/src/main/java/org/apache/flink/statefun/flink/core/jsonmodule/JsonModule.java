@@ -27,6 +27,7 @@ import java.util.Objects;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.statefun.sdk.spi.StatefulFunctionModule;
 
+// note: 通过 yaml 文件解析生成
 final class JsonModule implements StatefulFunctionModule {
 
   /** Entities in the JSON moduleSpecNode that should be parsed and bound to the module. */
@@ -37,6 +38,7 @@ final class JsonModule implements StatefulFunctionModule {
           new RouterJsonEntity(),
           new EgressJsonEntity());
 
+  //note: yaml 文件解析出 JSON 格式数据
   private final JsonNode moduleSpecNode;
   private final FormatVersion formatVersion;
   private final URL moduleUrl;
@@ -47,6 +49,7 @@ final class JsonModule implements StatefulFunctionModule {
     this.moduleUrl = Objects.requireNonNull(moduleUrl);
   }
 
+  // note: 通过这里将解析的 yaml 文件构 bind 到对应的 Binder 上
   public void configure(Map<String, String> conf, Binder binder) {
     try {
       ENTITIES.forEach(jsonEntity -> jsonEntity.bind(binder, moduleSpecNode, formatVersion));

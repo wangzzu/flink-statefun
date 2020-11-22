@@ -46,6 +46,7 @@ import org.apache.flink.statefun.sdk.io.Router;
  *
  * <p>This message would be routed to the address: {@code Address(FunctionType(org.apache.flink,
  * python-function), bob)}.
+ * note： 这里有个示例，数据的路由跟 PB MSG 的格式有关系
  */
 public final class ProtobufRouter implements Router<Message> {
 

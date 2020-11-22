@@ -28,6 +28,7 @@ import org.apache.flink.statefun.sdk.spi.StatefulFunctionModule;
 
 public final class Modules {
   private final List<FlinkIoModule> ioModules;
+  // note: StatefulFunctionModule list
   private final List<StatefulFunctionModule> statefulFunctionModules;
 
   private Modules(
@@ -36,26 +37,33 @@ public final class Modules {
     this.statefulFunctionModules = statefulFunctionModules;
   }
 
+  // note: load modules
   public static Modules loadFromClassPath() {
     List<StatefulFunctionModule> statefulFunctionModules = new ArrayList<>();
     List<FlinkIoModule> ioModules = new ArrayList<>();
 
+    // note: ServiceLoader.load Java SPI
     for (StatefulFunctionModule provider : ServiceLoader.load(StatefulFunctionModule.class)) {
       statefulFunctionModules.add(provider);
     }
+    // note: Module JSON File
     for (StatefulFunctionModule provider : JsonServiceLoader.load()) {
       statefulFunctionModules.add(provider);
     }
+    // note: StateFun distribute jar 包会自动创建 META-INF/services/org.apache.flink.statefun.flink.io.spi.FlinkIoModule 文件
+    // note: 这个文件包含 FlinkIoModule 的实现对象
     for (FlinkIoModule provider : ServiceLoader.load(FlinkIoModule.class)) {
       ioModules.add(provider);
     }
     return new Modules(ioModules, statefulFunctionModules);
   }
 
+  // note: create StateFun Universe by module setting
   public StatefulFunctionsUniverse createStatefulFunctionsUniverse(
       StatefulFunctionsConfig configuration) {
     MessageFactoryType factoryType = configuration.getFactoryType();
 
+    // note: 所有的 ioModules 及 statefulFunctionModules 都会 bind 到这个 universe 上
     StatefulFunctionsUniverse universe = new StatefulFunctionsUniverse(factoryType);
 
     final Map<String, String> globalConfiguration = configuration.getGlobalConfigurations();

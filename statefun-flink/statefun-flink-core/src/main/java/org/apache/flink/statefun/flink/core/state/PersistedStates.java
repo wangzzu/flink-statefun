@@ -35,6 +35,7 @@ import org.apache.flink.statefun.sdk.state.PersistedValue;
 
 public final class PersistedStates {
 
+  // note: state 绑定
   public static void findReflectivelyAndBind(
       @Nullable Object instance, FlinkStateBinder stateBinder) {
     List<?> states = findReflectively(instance);
@@ -60,6 +61,7 @@ public final class PersistedStates {
     if (instance == null) {
       return;
     }
+    // note: 这里反射通过注解找到对应的 State 类
     for (Field field : findAnnotatedFields(instance.getClass(), Persisted.class)) {
       visitField(instance, field);
     }
@@ -69,6 +71,7 @@ public final class PersistedStates {
     return persistedStates;
   }
 
+  // note: 记录到对应的列表中
   private void visitField(@Nonnull Object instance, @Nonnull Field field) {
     if (Modifier.isStatic(field.getModifiers())) {
       throw new IllegalArgumentException(
@@ -91,6 +94,7 @@ public final class PersistedStates {
     }
   }
 
+  // note: 可以支持的类型
   private static boolean isPersistedState(Class<?> fieldType) {
     return fieldType == PersistedValue.class
         || fieldType == PersistedTable.class

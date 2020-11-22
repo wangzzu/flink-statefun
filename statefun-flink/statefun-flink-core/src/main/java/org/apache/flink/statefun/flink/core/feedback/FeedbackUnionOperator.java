@@ -86,6 +86,7 @@ public final class FeedbackUnionOperator<T> extends AbstractStreamOperator<T>
     sendDownstream(streamRecord.getValue());
   }
 
+  //note: 可能会遇到 barrier 的数据
   @Override
   public void processFeedback(T element) {
     if (closedOrDisposed) {
@@ -135,7 +136,7 @@ public final class FeedbackUnionOperator<T> extends AbstractStreamOperator<T>
     //
     // now we can start processing new messages. We do so by registering ourselves as a
     // FeedbackConsumer
-    //
+    // note: 注册一个 FeedbackConsumer
     registerFeedbackConsumer(new MailboxExecutorFacade(mailboxExecutor, "Feedback Consumer"));
   }
 
@@ -171,6 +172,7 @@ public final class FeedbackUnionOperator<T> extends AbstractStreamOperator<T>
     final SubtaskFeedbackKey<T> key =
         feedbackKey.withSubTaskIndex(getRuntimeContext().getIndexOfThisSubtask());
     FeedbackChannelBroker broker = FeedbackChannelBroker.get();
+    // note: 获取对应的 channel
     FeedbackChannel<T> channel = broker.getChannel(key);
     channel.registerConsumer(this, mailboxExecutor);
   }

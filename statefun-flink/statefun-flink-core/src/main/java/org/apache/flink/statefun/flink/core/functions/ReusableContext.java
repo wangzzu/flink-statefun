@@ -67,22 +67,30 @@ final class ReusableContext implements ApplyingContext, AsyncWaiter {
   public void apply(LiveFunction function, Message inMessage) {
     this.in = inMessage;
     this.function = function;
+    // note: 设置 key
     state.setCurrentKey(inMessage.target());
     function.metrics().incomingMessage();
+    // note: function 的调用处理
     function.receive(this, in);
+    // note: 发送数据
     in.postApply();
     this.in = null;
   }
 
+  // note: send 到其他的 function 中
   @Override
   public void send(Address to, Object what) {
     Objects.requireNonNull(to);
     Objects.requireNonNull(what);
     Message envelope = messageFactory.from(self(), to, what);
+
+    // note: 如果当前这个数据在本 task 中，local 直接处理
+    // note: 根据 hash 值判断当前的 address 是否属于当前的 task 处理，如果需要的话加到对应的 queue 中
     if (thisPartition.contains(to)) {
       localSink.accept(envelope);
       function.metrics().outgoingLocalMessage();
     } else {
+      // note: 否者发送
       remoteSink.accept(envelope);
       function.metrics().outgoingRemoteMessage();
     }

@@ -65,6 +65,7 @@ public class ModuleSpecs implements Iterable<ModuleSpec>, Serializable {
     return loadableFunctions;
   }
 
+  // note: 表示 Module 的 jar 包及 yaml 文件
   private static ModuleSpec findLoadableModuleArtifacts(File subDirectory) throws IOException {
     ModuleSpec.Builder builder = ModuleSpec.builder();
 

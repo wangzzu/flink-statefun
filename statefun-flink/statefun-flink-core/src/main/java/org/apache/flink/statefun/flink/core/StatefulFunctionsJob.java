@@ -27,17 +27,21 @@ import org.apache.flink.statefun.flink.core.translation.FlinkUniverse;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.util.FlinkUserCodeClassLoader;
 
+// note: StateFun job entry point
 public class StatefulFunctionsJob {
 
   public static void main(String... args) throws Exception {
     ParameterTool parameterTool = ParameterTool.fromArgs(args);
     Map<String, String> globalConfigurations = parameterTool.toMap();
 
+    // note: StreamExecutionEnvironment
     StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
     StatefulFunctionsConfig stateFunConfig = StatefulFunctionsConfig.fromEnvironment(env);
     stateFunConfig.addAllGlobalConfigurations(globalConfigurations);
+    // note: 序列化这个 configuration(这里使用的是 ClassPathUniverseProvider 类型)
     stateFunConfig.setProvider(new StatefulFunctionsUniverses.ClassPathUniverseProvider());
 
+    // note: 执行 stateFun application
     main(env, stateFunConfig);
   }
 
@@ -54,16 +58,20 @@ public class StatefulFunctionsJob {
 
     setDefaultContextClassLoaderIfAbsent();
 
+    // note: enable object reuse
     env.getConfig().enableObjectReuse();
 
+    // note: 根据 java 的 Module 或者 yaml 文件创建对应的 StateFun Universe 对象
     final StatefulFunctionsUniverse statefulFunctionsUniverse =
         StatefulFunctionsUniverses.get(
             Thread.currentThread().getContextClassLoader(), stateFunConfig);
 
+    // note: check 是否缺少相关的模块
     final StatefulFunctionsUniverseValidator statefulFunctionsUniverseValidator =
         new StatefulFunctionsUniverseValidator();
     statefulFunctionsUniverseValidator.validate(statefulFunctionsUniverse);
 
+    // note: 根据 statefulFunctionsUniverse 构建 StateFun Pipeline
     FlinkUniverse flinkUniverse = new FlinkUniverse(statefulFunctionsUniverse, stateFunConfig);
     flinkUniverse.configure(env);
 

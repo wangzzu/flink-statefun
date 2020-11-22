@@ -112,6 +112,7 @@ public class FunctionGroupOperator extends AbstractStreamOperator<Message>
     //
     // the core logic of applying messages to functions.
     //
+    // note: 初始化 Reductions，Functions 的核心处理逻辑
     this.reductions =
         Reductions.create(
             backPressureValve,
@@ -136,7 +137,7 @@ public class FunctionGroupOperator extends AbstractStreamOperator<Message>
       final DynamicallyRegisteredTypes dynamicallyRegisteredTypes =
           new DynamicallyRegisteredTypes(statefulFunctionsUniverse.types());
       RemoteFunctionStateMigrator.apply(
-          statefulFunctionsUniverse.functions(),
+          statefulFunctionsUniverse.functions(), // note: functions
           getKeyedStateBackend(),
           dynamicallyRegisteredTypes.registerType(String.class),
           dynamicallyRegisteredTypes.registerType(byte[].class));

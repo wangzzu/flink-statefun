@@ -17,6 +17,7 @@
  */
 package org.apache.flink.statefun.flink.core.message;
 
+// note: msg 不同的序列化格式
 public enum MessageFactoryType {
   WITH_KRYO_PAYLOADS,
   WITH_PROTOBUF_PAYLOADS,

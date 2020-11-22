@@ -55,6 +55,7 @@ public final class FeedbackSinkOperator<V> extends AbstractStreamOperator<Void>
   @Override
   public void processElement(StreamRecord<V> record) {
     V value = record.getValue();
+    // note: 放到对应的 channel 中
     channel.put(value);
     totalProduced.inc();
   }

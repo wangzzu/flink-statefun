@@ -38,6 +38,7 @@ import org.apache.flink.streaming.api.datastream.DataStreamUtils;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.util.OutputTag;
 
+// note: StatefulFunction translator
 final class StatefulFunctionTranslator {
   private final FeedbackKey<Message> feedbackKey;
   private final StatefulFunctionsConfig configuration;
@@ -48,20 +49,26 @@ final class StatefulFunctionTranslator {
     this.configuration = Objects.requireNonNull(configuration);
   }
 
+  // note: 转换的核心实现
   Map<EgressIdentifier<?>, DataStream<?>> translate(Sources sources, Sinks sinks) {
+    // TODO: 2020/10/15 feedbackUnionOperator 这个 Operator 是做什么用途的
     SingleOutputStreamOperator<Message> feedbackUnionOperator =
         feedbackUnionOperator(sources.unionStream());
 
+    // note: function 的处理
     SingleOutputStreamOperator<Message> functionOutputStream =
         functionOperator(feedbackUnionOperator, sinks.sideOutputTags());
 
+    // note: 增加一个 FeedbackSinkOperator
     SingleOutputStreamOperator<Void> writeBackOut = feedbackOperator(functionOutputStream);
 
+    // note: 设置 groupName 及 并发
     coLocate(feedbackUnionOperator, functionOutputStream, writeBackOut);
 
     return sinks.sideOutputStreams(functionOutputStream);
   }
 
+  // note: 这里会创建 feedbackChannel 及注册 consumerTask 来监听这个 channel
   private SingleOutputStreamOperator<Message> feedbackUnionOperator(DataStream<Message> input) {
     TypeInformation<Message> typeInfo = input.getType();
 
@@ -69,6 +76,7 @@ final class StatefulFunctionTranslator {
         new FeedbackUnionOperatorFactory<>(
             configuration, feedbackKey, new IsCheckpointBarrier(), new FeedbackKeySelector());
 
+    // note: 这里会有一个 keyby，增加一个 FeedbackUnionOperator 的 Operator
     return input
         .keyBy(new MessageKeySelector())
         .transform(StatefulFunctionsJobConstants.FEEDBACK_UNION_OPERATOR_NAME, typeInfo, factory)

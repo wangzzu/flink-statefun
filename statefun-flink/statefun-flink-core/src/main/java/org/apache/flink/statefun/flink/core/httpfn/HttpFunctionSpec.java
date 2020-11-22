@@ -116,6 +116,7 @@ public final class HttpFunctionSpec implements FunctionSpec, Serializable {
     private final FunctionType functionType;
     private final URI endpoint;
 
+    // note: yaml 文件中配置 state 信息
     private final List<StateSpec> states = new ArrayList<>();
     private Duration maxRequestDuration = DEFAULT_HTTP_TIMEOUT;
     private Duration connectTimeout = DEFAULT_HTTP_CONNECT_TIMEOUT;

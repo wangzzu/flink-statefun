@@ -42,6 +42,7 @@ final class Sinks {
     this.sinks = Objects.requireNonNull(sinks);
   }
 
+  // note: create sink
   static Sinks create(StatefulFunctionsUniverse universe) {
     return new Sinks(sideOutputs(universe), sinkFunctions(universe));
   }

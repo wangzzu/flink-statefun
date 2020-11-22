@@ -27,6 +27,7 @@ import org.apache.flink.statefun.sdk.io.EgressIdentifier;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
+// note: statefun pipeline
 public final class FlinkUniverse {
   private static final FeedbackKey<Message> FEEDBACK_KEY =
       new FeedbackKey<>("statefun-pipeline", 1);
@@ -40,15 +41,21 @@ public final class FlinkUniverse {
     this.configuration = Objects.requireNonNull(configuration);
   }
 
+  // note: 根据 universe 构建 StateFun Pipeline
   public void configure(StreamExecutionEnvironment env) {
+    // note: source
     Sources sources = Sources.create(env, universe, configuration);
+    // note: sink
     Sinks sinks = Sinks.create(universe);
 
+    // note: stateFun process
     StatefulFunctionTranslator translator =
         new StatefulFunctionTranslator(FEEDBACK_KEY, configuration);
 
+    // note: build stateFun Pipeline
     Map<EgressIdentifier<?>, DataStream<?>> sideOutputs = translator.translate(sources, sinks);
 
+    // note: dataSink
     sinks.consumeFrom(sideOutputs);
   }
 }

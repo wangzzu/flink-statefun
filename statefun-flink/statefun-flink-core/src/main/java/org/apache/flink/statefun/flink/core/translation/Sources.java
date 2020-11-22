@@ -48,12 +48,15 @@ final class Sources {
       StreamExecutionEnvironment env,
       StatefulFunctionsUniverse universe,
       StatefulFunctionsConfig configuration) {
+    //note: ingress to SourceFunction
     final Map<IngressIdentifier<?>, DecoratedSource> sourceFunctions =
         ingressToSourceFunction(universe);
 
+    // note: SourceFunction to DataStream, and add the DataSource to Env
     final Map<IngressIdentifier<?>, DataStream<?>> sourceStreams =
         sourceFunctionToDataStream(env, sourceFunctions);
 
+    // note: add router（将 Address 封装到要发送的 Msg 中）
     final Map<IngressIdentifier<?>, DataStream<Message>> envelopeSources =
         dataStreamToEnvelopStream(universe, sourceStreams, configuration);
 
@@ -92,6 +95,7 @@ final class Sources {
     Map<IngressIdentifier<?>, DataStream<?>> sourceStreams = new HashMap<>();
     sourceFunctions.forEach(
         (id, sourceFunction) -> {
+          // note: 创建对应的 DataSource
           DataStreamSource<?> stream = env.addSource(sourceFunction.source);
 
           stream.name(sourceFunction.name);
