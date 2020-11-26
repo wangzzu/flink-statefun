@@ -31,7 +31,7 @@ Stateful Functions 使我们能够将强大的状态管理与像 AWS Lambda 类�
 
 ### <a name="abstraction"></a>摘要
 
-Stateful Functions 应用程序由以下原语组成：有状态函数，入口(ingresses)，路由(routers)和出口(egresses)。
+Stateful Functions 应用程序由以下原语组成：有状态函数，入口（ingresses），路由（routers）和出口（egresses）。
 
 <p align="center">
   <img src="docs/fig/stateful_functions_overview.png" width="650px"/>
@@ -46,7 +46,7 @@ Stateful Functions 应用程序由以下原语组成：有状态函数，入口(
 
 * 函数实例是 _虚拟的_ ，因为它们不总是同时在内存中活跃。在任何一个时间点，只有一小部分函数及其状态作为实际对象存在。
 当一个虚拟实例接收到消息时，将配置一个对象并带着该虚拟实例的状态加载，然后处理该消息。与虚拟内存类似，许多函数的状态可能
-在任何时间点都被“交换出去”(swap out)。
+在任何时间点都被“交换出去”（swap out）。
 
 * 函数的每个虚拟实例都有其自己的状态，可以通过局部变量访问，
 并且该状态是私有的，对于该实例来说是本地的。
@@ -66,7 +66,7 @@ Stateful Functions 应用程序由以下原语组成：有状态函数，入口(
 * _出口_（Egress）是一种以标准化方式从应用程序发送事件的方法。
 出口是可选的，也有可能没有事件需要从应用程序中发送出去，函数会完成事件的处理或直接调用其他应用程序。
 
-### <a name="modules"></a>模块(Module)
+### <a name="modules"></a>模块（Module）
 
 _模块_（Module）是将核心构建单元添加到一个 Stateful Functions 应用程序的入口，这些核心构建单元包括：入口（Ingress）、出口（Egress）、路由（Router）和有状态函数。
 
