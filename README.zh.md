@@ -31,7 +31,7 @@ Stateful Functions 使我们能够将强大的状态管理与像 AWS Lambda 类�
 
 ### <a name="abstraction"></a>摘要
 
-Stateful Functions 应用程序由以下原语组成：有状态函数，入口(ingresses)，路由器(routers)和出口(egresses)。
+Stateful Functions 应用程序由以下原语组成：有状态函数，入口(ingresses)，路由(routers)和出口(egresses)。
 
 <p align="center">
   <img src="docs/fig/stateful_functions_overview.png" width="650px"/>
@@ -61,14 +61,14 @@ Stateful Functions 应用程序由以下原语组成：有状态函数，入口(
 * _入口_ （Ingress）是事件最初到达 Stateful Functions 应用程序的方式。
 入口可以是消息队列，日志或 HTTP 服务器 —— 任何可以产生事件并交由应用程序处理的系统。
 
-* _路由器_（Router）将入口（Ingress）与 stateful function 连接起来，以确定哪个函数实例应该在最开始时处理来自 Ingress 的事件。
+* _路由l（Router）将入口（Ingress）与 stateful function 连接起来，以确定哪个函数实例应该在最开始时处理来自入口的事件。
 
 * _出口_（Egress）是一种以标准化方式从应用程序发送事件的方法。
 出口是可选的，也有可能没有事件需要从应用程序中发送出去，函数会完成事件的处理或直接调用其他应用程序。
 
 ### <a name="modules"></a>模块(Module)
 
-_模块_（Module）是将核心构建单元添加到一个 Stateful Functions 应用程序的入口，这些核心构建单元包括：入口（Ingress）、出口（Egress）、路由器（Router）和有状态函数。
+_模块_（Module）是将核心构建单元添加到一个 Stateful Functions 应用程序的入口，这些核心构建单元包括：入口（Ingress）、出口（Egress）、路由（Router）和有状态函数。
 
 单个应用程序可以是多个模块（Module）的组合，每个模块都构成了整个应用程序的一部分。
 这允许一个 Stateful Functions 应用程序的不同部分由不同的模块来组成，例如：
@@ -84,7 +84,7 @@ Stateful Functions Runtime 旨在提供一组类似于 [无服务器函数](http
 
 Runtime 基于 Apache Flink<sup>®</sup> 构建，并具有以下设计原则：
 
-*  __逻辑上计算/状态共置__：消息传递，状态访问/更新和函数调用在一起紧密管理，这在抽象层面就天然地保证了一致性。
+* __逻辑上计算/状态共置__：消息传递，状态访问/更新和函数调用在一起紧密管理，这在抽象层面就天然地保证了一致性。
 
 * __物理上计算/状态分离__：可以远程执行函数计算，并将消息和状态信息作为调用请求的一部分。这样的话，函数（Function）就可以像无状态进程一样管理，并且支持快速扩展、滚动升级和其他常见的运维模式。
 
