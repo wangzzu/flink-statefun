@@ -42,7 +42,7 @@ Stateful Functions 应用程序由以下原语组成：有状态函数，入口�
 * 一个 _stateful function_ 是通过消息调用的一小段逻辑/代码。每个 stateful function 都是作为 _函数类型_ 的唯一可
 调用 _虚拟实例_ 存在。每个实例都通过其 ``type`` 以及 type 中的唯一 ``ID``（字符串）来寻址。
 
-* Stateful Functions 可以从 ingress 或任何其他的 stateful function（包括其自身）中调用，调用者只需要知道目标函数的逻辑地址即可。
+* Stateful Functions 可以从入口（Ingress）或任何其他的 stateful function（包括其自身）中调用，调用者只需要知道目标函数的逻辑地址即可。
 
 * 函数实例是 _虚拟的_ ，因为它们不总是同时在内存中活跃。在任何一个时间点，只有一小部分函数及其状态作为实际对象存在。
 当一个虚拟实例接收到消息时，将配置一个对象并带着该虚拟实例的状态加载，然后处理该消息。与虚拟内存类似，许多函数的状态可能
@@ -51,17 +51,14 @@ Stateful Functions 应用程序由以下原语组成：有状态函数，入口�
 * 函数的每个虚拟实例都有其自己的状态，可以通过局部变量访问，
 并且该状态是私有的，对于该实例来说是本地的。
 
-如果您知道 Apache Flink 的 DataStream API，则可以将 Stateful Functions 考虑为轻量级的
-`KeyedProcessFunction` 。函数 ``类型`` 等同于处理函数转换（process function transformation），而 `` ID `` 则是键值（key）。不同之处
-在于，函数不是在定义数据流（拓扑）的有向无环图（DAG）中组装，
-而是使用地址将事件任意发送到所有其他函数。
+如果您知道 Apache Flink 的 DataStream API，则可以将 Stateful Functions 考虑为轻量级的 `KeyedProcessFunction` 。函数 ``类型`` 等同于处理函数转换（process function transformation），而 `` ID `` 则是键值（key）。不同之处在于，函数不是在定义数据流（拓扑）的有向无环图（DAG）中组装，而是使用地址将事件任意发送到所有其他函数。
 
 #### 入口和出口
 
 * _入口_ （Ingress）是事件最初到达 Stateful Functions 应用程序的方式。
 入口可以是消息队列，日志或 HTTP 服务器 —— 任何可以产生事件并交由应用程序处理的系统。
 
-* _路由l（Router）将入口（Ingress）与 stateful function 连接起来，以确定哪个函数实例应该在最开始时处理来自入口的事件。
+* _路由_（Router）将入口（Ingress）与 stateful function 连接起来，以确定哪个函数实例应该在最开始时处理来自入口的事件。
 
 * _出口_（Egress）是一种以标准化方式从应用程序发送事件的方法。
 出口是可选的，也有可能没有事件需要从应用程序中发送出去，函数会完成事件的处理或直接调用其他应用程序。
