@@ -21,21 +21,28 @@ package org.apache.flink.statefun.flink.core.httpfn;
 import static org.apache.flink.statefun.flink.core.httpfn.OkHttpUnixSocketBridge.configureUnixDomainSocket;
 
 import java.util.Map;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.NotThreadSafe;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
+import org.apache.flink.statefun.flink.core.common.ManagingResources;
 import org.apache.flink.statefun.flink.core.reqreply.PersistedRemoteFunctionValues;
 import org.apache.flink.statefun.flink.core.reqreply.RequestReplyClient;
 import org.apache.flink.statefun.flink.core.reqreply.RequestReplyFunction;
 import org.apache.flink.statefun.sdk.FunctionType;
 import org.apache.flink.statefun.sdk.StatefulFunctionProvider;
 
-public class HttpFunctionProvider implements StatefulFunctionProvider {
+@NotThreadSafe
+public class HttpFunctionProvider implements StatefulFunctionProvider, ManagingResources {
   private final Map<FunctionType, HttpFunctionSpec> supportedTypes;
-  private final OkHttpClient sharedClient;
+
+  /** lazily initialized by {code buildHttpClient} */
+  @Nullable private OkHttpClient sharedClient;
+
+  private volatile boolean shutdown;
 
   public HttpFunctionProvider(Map<FunctionType, HttpFunctionSpec> supportedTypes) {
     this.supportedTypes = supportedTypes;
-    this.sharedClient = OkHttpUtils.newClient();
   }
 
   @Override
@@ -55,8 +62,14 @@ public class HttpFunctionProvider implements StatefulFunctionProvider {
   }
 
   private RequestReplyClient buildHttpClient(HttpFunctionSpec spec) {
+    if (sharedClient == null) {
+      sharedClient = OkHttpUtils.newClient();
+    }
     OkHttpClient.Builder clientBuilder = sharedClient.newBuilder();
     clientBuilder.callTimeout(spec.maxRequestDuration());
+    clientBuilder.connectTimeout(spec.connectTimeout());
+    clientBuilder.readTimeout(spec.readTimeout());
+    clientBuilder.writeTimeout(spec.writeTimeout());
 
     final HttpUrl url;
     if (spec.isUnixDomainSocket()) {
@@ -73,6 +86,12 @@ public class HttpFunctionProvider implements StatefulFunctionProvider {
     } else {
       url = HttpUrl.get(spec.endpoint());
     }
-    return new HttpRequestReplyClient(url, clientBuilder.build());
+    return new HttpRequestReplyClient(url, clientBuilder.build(), () -> shutdown);
+  }
+
+  @Override
+  public void shutdown() {
+    shutdown = true;
+    OkHttpUtils.closeSilently(sharedClient);
   }
 }

@@ -27,19 +27,19 @@
 # we change the version for the complete docs when forking of a release branch
 # etc.
 # The full version string as referenced in Maven (e.g. 1.2.1)
-version: "2.2-SNAPSHOT"
+version: "2.3-SNAPSHOT"
 # For stable releases, leave the bugfix version out (e.g. 1.2). For snapshot
 # release this should be the same as the regular version
-version_title: "2.2-SNAPSHOT"
+version_title: "2.3-SNAPSHOT"
 # The Flink version supported by this version of Stateful Functions
-flink_version: "1.10.1"
+flink_version: "1.11.1"
 # Branch on Github for this version
 github_branch: "master"
 
 # Plain Scala version is needed for e.g. the Gradle quickstart.
-scala_version: "2.11"
+scala_version: "2.12"
 # This suffix is appended to the Scala-dependent Maven artifact names
-scala_version_suffix: "_2.11"
+scala_version_suffix: "_2.12"
 
 # Plain flink-shaded version is needed for e.g. the hive connector.
 # Please update the shaded_version once new flink-shaded is released.
@@ -67,6 +67,7 @@ show_outdated_warning: false
 previous_docs:
   2.0: https://ci.apache.org/projects/flink/flink-statefun-docs-release-2.0
   2.1: https://ci.apache.org/projects/flink/flink-statefun-docs-release-2.1
+  2.2: https://ci.apache.org/projects/flink/flink-statefun-docs-release-2.2
 
 #------------------------------------------------------------------------------
 # BUILD CONFIG

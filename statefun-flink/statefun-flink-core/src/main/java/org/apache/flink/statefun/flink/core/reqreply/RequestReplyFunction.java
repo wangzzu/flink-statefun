@@ -22,13 +22,14 @@ import static org.apache.flink.statefun.flink.core.common.PolyglotUtil.polyglotA
 import static org.apache.flink.statefun.flink.core.common.PolyglotUtil.sdkAddressToPolyglotAddress;
 
 import com.google.protobuf.Any;
-import com.google.protobuf.ByteString;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import org.apache.flink.statefun.flink.core.backpressure.AsyncWaiter;
+import org.apache.flink.statefun.flink.core.backpressure.InternalContext;
+import org.apache.flink.statefun.flink.core.metrics.RemoteInvocationMetrics;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.EgressMessage;
+import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.IncompleteInvocationContext;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.InvocationResponse;
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction;
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction.Invocation;
@@ -41,6 +42,7 @@ import org.apache.flink.statefun.sdk.annotations.Persisted;
 import org.apache.flink.statefun.sdk.io.EgressIdentifier;
 import org.apache.flink.statefun.sdk.state.PersistedAppendingBuffer;
 import org.apache.flink.statefun.sdk.state.PersistedValue;
+import org.apache.flink.types.Either;
 
 public final class RequestReplyFunction implements StatefulFunction {
 
@@ -79,17 +81,18 @@ public final class RequestReplyFunction implements StatefulFunction {
 
   @Override
   public void invoke(Context context, Object input) {
+    InternalContext castedContext = (InternalContext) context;
     if (!(input instanceof AsyncOperationResult)) {
-      onRequest(context, (Any) input);
+      onRequest(castedContext, (Any) input);
       return;
     }
     @SuppressWarnings("unchecked")
     AsyncOperationResult<ToFunction, FromFunction> result =
         (AsyncOperationResult<ToFunction, FromFunction>) input;
-    onAsyncResult(context, result);
+    onAsyncResult(castedContext, result);
   }
 
-  private void onRequest(Context context, Any message) {
+  private void onRequest(InternalContext context, Any message) {
     Invocation.Builder invocationBuilder = singeInvocationBuilder(context, message);
     int inflightOrBatched = requestState.getOrDefault(-1);
     if (inflightOrBatched < 0) {
@@ -106,54 +109,84 @@ public final class RequestReplyFunction implements StatefulFunction {
     batch.append(invocationBuilder.build());
     inflightOrBatched++;
     requestState.set(inflightOrBatched);
+    context.functionTypeMetrics().appendBacklogMessages(1);
     if (isMaxNumBatchRequestsExceeded(inflightOrBatched)) {
       // we are at capacity, can't add anything to the batch.
       // we need to signal to the runtime that we are unable to process any new input
       // and we must wait for our in flight asynchronous operation to complete before
       // we are able to process more input.
-      ((AsyncWaiter) context).awaitAsyncOperationComplete();
+      context.awaitAsyncOperationComplete();
     }
   }
 
   private void onAsyncResult(
-      Context context, AsyncOperationResult<ToFunction, FromFunction> asyncResult) {
+      InternalContext context, AsyncOperationResult<ToFunction, FromFunction> asyncResult) {
     if (asyncResult.unknown()) {
       ToFunction batch = asyncResult.metadata();
       sendToFunction(context, batch);
       return;
     }
-    InvocationResponse invocationResult = unpackInvocationOrThrow(context.self(), asyncResult);
-    handleInvocationResponse(context, invocationResult);
+    if (asyncResult.failure()) {
+      throw new IllegalStateException(
+          "Failure forwarding a message to a remote function " + context.self(),
+          asyncResult.throwable());
+    }
 
-    final int state = requestState.getOrDefault(-1);
-    if (state < 0) {
+    final Either<InvocationResponse, IncompleteInvocationContext> response =
+        unpackResponse(asyncResult.value());
+    if (response.isRight()) {
+      handleIncompleteInvocationContextResponse(context, response.right(), asyncResult.metadata());
+    } else {
+      handleInvocationResultResponse(context, response.left());
+    }
+  }
+
+  private static Either<InvocationResponse, IncompleteInvocationContext> unpackResponse(
+      FromFunction fromFunction) {
+    if (fromFunction.hasIncompleteInvocationContext()) {
+      return Either.Right(fromFunction.getIncompleteInvocationContext());
+    }
+    if (fromFunction.hasInvocationResult()) {
+      return Either.Left(fromFunction.getInvocationResult());
+    }
+    // function had no side effects
+    return Either.Left(InvocationResponse.getDefaultInstance());
+  }
+
+  private void handleIncompleteInvocationContextResponse(
+      InternalContext context,
+      IncompleteInvocationContext incompleteContext,
+      ToFunction originalBatch) {
+    managedStates.registerStates(incompleteContext.getMissingValuesList());
+
+    final InvocationBatchRequest.Builder retryBatch = createRetryBatch(originalBatch);
+    sendToFunction(context, retryBatch);
+  }
+
+  private void handleInvocationResultResponse(InternalContext context, InvocationResponse result) {
+    handleOutgoingMessages(context, result);
+    handleOutgoingDelayedMessages(context, result);
+    handleEgressMessages(context, result);
+    managedStates.updateStateValues(result.getStateMutationsList());
+
+    final int numBatched = requestState.getOrDefault(-1);
+    if (numBatched < 0) {
       throw new IllegalStateException("Got an unexpected async result");
-    } else if (state == 0) {
+    } else if (numBatched == 0) {
       requestState.clear();
     } else {
       final InvocationBatchRequest.Builder nextBatch = getNextBatch();
       // an async request was just completed, but while it was in flight we have
       // accumulated a batch, we now proceed with:
-      // a) clearing the batch from our own persisted state (the batch moves to the async operation
+      // a) clearing the batch from our own persisted state (the batch moves to the async
+      // operation
       // state)
       // b) sending the accumulated batch to the remote function.
       requestState.set(0);
       batch.clear();
+      context.functionTypeMetrics().consumeBacklogMessages(numBatched);
       sendToFunction(context, nextBatch);
     }
-  }
-
-  private InvocationResponse unpackInvocationOrThrow(
-      Address self, AsyncOperationResult<ToFunction, FromFunction> result) {
-    if (result.failure()) {
-      throw new IllegalStateException(
-          "Failure forwarding a message to a remote function " + self, result.throwable());
-    }
-    FromFunction fromFunction = result.value();
-    if (fromFunction.hasInvocationResult()) {
-      return fromFunction.getInvocationResult();
-    }
-    return InvocationResponse.getDefaultInstance();
   }
 
   private InvocationBatchRequest.Builder getNextBatch() {
@@ -163,11 +196,10 @@ public final class RequestReplyFunction implements StatefulFunction {
     return builder;
   }
 
-  private void handleInvocationResponse(Context context, InvocationResponse invocationResult) {
-    handleOutgoingMessages(context, invocationResult);
-    handleOutgoingDelayedMessages(context, invocationResult);
-    handleEgressMessages(context, invocationResult);
-    handleStateMutations(invocationResult);
+  private InvocationBatchRequest.Builder createRetryBatch(ToFunction toFunction) {
+    InvocationBatchRequest.Builder builder = InvocationBatchRequest.newBuilder();
+    builder.addAllInvocations(toFunction.getInvocation().getInvocationsList());
+    return builder;
   }
 
   private void handleEgressMessages(Context context, InvocationResponse invocationResult) {
@@ -200,41 +232,6 @@ public final class RequestReplyFunction implements StatefulFunction {
   }
 
   // --------------------------------------------------------------------------------
-  // State Management
-  // --------------------------------------------------------------------------------
-
-  private void addStates(ToFunction.InvocationBatchRequest.Builder batchBuilder) {
-    managedStates.forEach(
-        (stateName, stateValue) -> {
-          ToFunction.PersistedValue.Builder valueBuilder =
-              ToFunction.PersistedValue.newBuilder().setStateName(stateName);
-
-          if (stateValue != null) {
-            valueBuilder.setStateValue(ByteString.copyFrom(stateValue));
-          }
-          batchBuilder.addState(valueBuilder);
-        });
-  }
-
-  private void handleStateMutations(InvocationResponse invocationResult) {
-    for (FromFunction.PersistedValueMutation mutate : invocationResult.getStateMutationsList()) {
-      final String stateName = mutate.getStateName();
-      switch (mutate.getMutationType()) {
-        case DELETE:
-          managedStates.clearValue(stateName);
-          break;
-        case MODIFY:
-          managedStates.setValue(stateName, mutate.getStateValue().toByteArray());
-          break;
-        case UNRECOGNIZED:
-          break;
-        default:
-          throw new IllegalStateException("Unexpected value: " + mutate.getMutationType());
-      }
-    }
-  }
-
-  // --------------------------------------------------------------------------------
   // Send Message to Remote Function
   // --------------------------------------------------------------------------------
   /**
@@ -263,14 +260,21 @@ public final class RequestReplyFunction implements StatefulFunction {
   /** Sends a {@link InvocationBatchRequest} to the remote function. */
   private void sendToFunction(Context context, InvocationBatchRequest.Builder batchBuilder) {
     batchBuilder.setTarget(sdkAddressToPolyglotAddress(context.self()));
-    addStates(batchBuilder);
+    managedStates.attachStateValues(batchBuilder);
     ToFunction toFunction = ToFunction.newBuilder().setInvocation(batchBuilder).build();
     sendToFunction(context, toFunction);
   }
 
   private void sendToFunction(Context context, ToFunction toFunction) {
-
-    CompletableFuture<FromFunction> responseFuture = client.call(toFunction);
+    ToFunctionRequestSummary requestSummary =
+        new ToFunctionRequestSummary(
+            context.self(),
+            toFunction.getSerializedSize(),
+            toFunction.getInvocation().getStateCount(),
+            toFunction.getInvocation().getInvocationsCount());
+    RemoteInvocationMetrics metrics = ((InternalContext) context).functionTypeMetrics();
+    CompletableFuture<FromFunction> responseFuture =
+        client.call(requestSummary, metrics, toFunction);
     context.registerAsyncOperation(toFunction, responseFuture);
   }
 

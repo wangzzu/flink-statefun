@@ -17,7 +17,10 @@
  */
 package org.apache.flink.statefun.flink.core.metrics;
 
+import com.codahale.metrics.UniformReservoir;
+import org.apache.flink.dropwizard.metrics.DropwizardHistogramWrapper;
 import org.apache.flink.metrics.Counter;
+import org.apache.flink.metrics.Histogram;
 import org.apache.flink.metrics.MeterView;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.metrics.SimpleCounter;
@@ -27,12 +30,22 @@ final class FlinkFunctionTypeMetrics implements FunctionTypeMetrics {
   private final Counter outgoingLocalMessage;
   private final Counter outgoingRemoteMessage;
   private final Counter outgoingEgress;
+  private final Counter blockedAddress;
+  private final Counter inflightAsyncOps;
+  private final Counter backlogMessage;
+  private final Counter remoteInvocationFailures;
+  private final Histogram remoteInvocationLatency;
 
   FlinkFunctionTypeMetrics(MetricGroup typeGroup) {
     this.incoming = metered(typeGroup, "in");
-    this.outgoingLocalMessage = metered(typeGroup, "out-local");
-    this.outgoingRemoteMessage = metered(typeGroup, "out-remote");
-    this.outgoingEgress = metered(typeGroup, "out-egress");
+    this.outgoingLocalMessage = metered(typeGroup, "outLocal");
+    this.outgoingRemoteMessage = metered(typeGroup, "outRemote");
+    this.outgoingEgress = metered(typeGroup, "outEgress");
+    this.blockedAddress = typeGroup.counter("numBlockedAddress");
+    this.inflightAsyncOps = typeGroup.counter("inflightAsyncOps");
+    this.backlogMessage = typeGroup.counter("numBacklog");
+    this.remoteInvocationFailures = metered(typeGroup, "remoteInvocationFailures");
+    this.remoteInvocationLatency = typeGroup.histogram("remoteInvocationLatency", histogram());
   }
 
   @Override
@@ -55,9 +68,55 @@ final class FlinkFunctionTypeMetrics implements FunctionTypeMetrics {
     this.outgoingEgress.inc();
   }
 
+  @Override
+  public void blockedAddress() {
+    this.blockedAddress.inc();
+  }
+
+  @Override
+  public void unblockedAddress() {
+    this.blockedAddress.dec();
+  }
+
+  @Override
+  public void asyncOperationRegistered() {
+    this.inflightAsyncOps.inc();
+  }
+
+  @Override
+  public void asyncOperationCompleted() {
+    this.inflightAsyncOps.dec();
+  }
+
+  @Override
+  public void appendBacklogMessages(int count) {
+    backlogMessage.inc(count);
+  }
+
+  @Override
+  public void consumeBacklogMessages(int count) {
+    backlogMessage.dec(count);
+  }
+
+  @Override
+  public void remoteInvocationFailures() {
+    remoteInvocationFailures.inc();
+  }
+
+  @Override
+  public void remoteInvocationLatency(long elapsed) {
+    remoteInvocationLatency.update(elapsed);
+  }
+
   private static SimpleCounter metered(MetricGroup metrics, String name) {
     SimpleCounter counter = metrics.counter(name, new SimpleCounter());
     metrics.meter(name + "Rate", new MeterView(counter, 60));
     return counter;
+  }
+
+  private static DropwizardHistogramWrapper histogram() {
+    com.codahale.metrics.Histogram dropwizardHistogram =
+        new com.codahale.metrics.Histogram(new UniformReservoir());
+    return new DropwizardHistogramWrapper(dropwizardHistogram);
   }
 }

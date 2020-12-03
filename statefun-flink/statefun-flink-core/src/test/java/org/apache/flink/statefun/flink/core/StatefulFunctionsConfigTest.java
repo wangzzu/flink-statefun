@@ -17,6 +17,7 @@
  */
 package org.apache.flink.statefun.flink.core;
 
+import java.util.Optional;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.MemorySize;
@@ -29,6 +30,8 @@ import org.junit.Test;
 
 public class StatefulFunctionsConfigTest {
 
+  private final String serializerClassName = "com.sample.Serializer";
+
   @Test
   public void testSetConfigurations() {
     final String testName = "test-name";
@@ -36,7 +39,9 @@ public class StatefulFunctionsConfigTest {
     Configuration configuration = new Configuration();
     configuration.set(StatefulFunctionsConfig.FLINK_JOB_NAME, testName);
     configuration.set(
-        StatefulFunctionsConfig.USER_MESSAGE_SERIALIZER, MessageFactoryType.WITH_KRYO_PAYLOADS);
+        StatefulFunctionsConfig.USER_MESSAGE_SERIALIZER, MessageFactoryType.WITH_CUSTOM_PAYLOADS);
+    configuration.set(
+        StatefulFunctionsConfig.USER_MESSAGE_CUSTOM_PAYLOAD_SERIALIZER_CLASS, serializerClassName);
     configuration.set(
         StatefulFunctionsConfig.TOTAL_MEMORY_USED_FOR_FEEDBACK_CHECKPOINTING,
         MemorySize.ofMebiBytes(100));
@@ -48,10 +53,15 @@ public class StatefulFunctionsConfigTest {
     configuration.setString("statefun.module.global-config.key1", "value1");
     configuration.setString("statefun.module.global-config.key2", "value2");
 
-    StatefulFunctionsConfig stateFunConfig = new StatefulFunctionsConfig(configuration);
+    StatefulFunctionsConfig stateFunConfig =
+        StatefulFunctionsConfig.fromFlinkConfiguration(configuration);
 
     Assert.assertEquals(stateFunConfig.getFlinkJobName(), testName);
-    Assert.assertEquals(stateFunConfig.getFactoryType(), MessageFactoryType.WITH_KRYO_PAYLOADS);
+    Assert.assertEquals(
+        stateFunConfig.getFactoryKey().getType(), MessageFactoryType.WITH_CUSTOM_PAYLOADS);
+    Assert.assertEquals(
+        stateFunConfig.getFactoryKey().getCustomPayloadSerializerClassName(),
+        Optional.of(serializerClassName));
     Assert.assertEquals(stateFunConfig.getFeedbackBufferSize(), MemorySize.ofMebiBytes(100));
     Assert.assertEquals(stateFunConfig.getMaxAsyncOperationsPerTask(), 100);
     Assert.assertThat(
@@ -60,13 +70,7 @@ public class StatefulFunctionsConfigTest {
         stateFunConfig.getGlobalConfigurations(), Matchers.hasEntry("key2", "value2"));
   }
 
-  @Test(expected = StatefulFunctionsInvalidConfigException.class)
-  public void invalidStrictFlinkConfigsThrows() {
-    Configuration configuration = new Configuration();
-    new StatefulFunctionsConfig(configuration);
-  }
-
-  private static Configuration validConfiguration() {
+  private static Configuration baseConfiguration() {
     Configuration configuration = new Configuration();
     configuration.set(StatefulFunctionsConfig.FLINK_JOB_NAME, "name");
     configuration.set(
@@ -80,5 +84,23 @@ public class StatefulFunctionsConfigTest {
         "org.apache.flink.statefun;org.apache.kafka;com.google.protobuf");
     configuration.set(ExecutionCheckpointingOptions.MAX_CONCURRENT_CHECKPOINTS, 1);
     return configuration;
+  }
+
+  @Test(expected = StatefulFunctionsInvalidConfigException.class)
+  public void invalidCustomSerializerThrows() {
+    Configuration configuration = baseConfiguration();
+    configuration.set(
+        StatefulFunctionsConfig.USER_MESSAGE_SERIALIZER, MessageFactoryType.WITH_CUSTOM_PAYLOADS);
+    StatefulFunctionsConfigValidator.validate(configuration);
+  }
+
+  @Test(expected = StatefulFunctionsInvalidConfigException.class)
+  public void invalidNonCustomSerializerThrows() {
+    Configuration configuration = baseConfiguration();
+    configuration.set(
+        StatefulFunctionsConfig.USER_MESSAGE_SERIALIZER, MessageFactoryType.WITH_KRYO_PAYLOADS);
+    configuration.set(
+        StatefulFunctionsConfig.USER_MESSAGE_CUSTOM_PAYLOAD_SERIALIZER_CLASS, serializerClassName);
+    StatefulFunctionsConfigValidator.validate(configuration);
   }
 }

@@ -18,13 +18,18 @@
 
 package org.apache.flink.statefun.flink.core.reqreply;
 
+import com.google.protobuf.ByteString;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.BiConsumer;
 import org.apache.flink.statefun.flink.core.httpfn.StateSpec;
+import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.ExpirationSpec;
+import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.PersistedValueMutation;
+import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.PersistedValueSpec;
+import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction;
+import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction.InvocationBatchRequest;
 import org.apache.flink.statefun.sdk.annotations.Persisted;
 import org.apache.flink.statefun.sdk.state.Expiration;
 import org.apache.flink.statefun.sdk.state.PersistedStateRegistry;
@@ -36,40 +41,115 @@ public final class PersistedRemoteFunctionValues {
 
   private final Map<String, PersistedValue<byte[]>> managedStates;
 
+  /**
+   * @deprecated {@link PersistedRemoteFunctionValues} should no longer be instantiated with eagerly
+   *     declared state specs. State can now be dynamically registered with {@link
+   *     #registerStates(List)}. This constructor will be removed once old module specification
+   *     formats, which supports eager state declarations, are removed.
+   */
+  @Deprecated
   public PersistedRemoteFunctionValues(List<StateSpec> stateSpecs) {
     Objects.requireNonNull(stateSpecs);
     this.managedStates = new HashMap<>(stateSpecs.size());
-    stateSpecs.forEach(spec -> managedStates.put(spec.name(), createStateHandle(spec)));
+    stateSpecs.forEach(this::createAndRegisterEagerValueState);
   }
 
-  void forEach(BiConsumer<String, byte[]> consumer) {
-    managedStates.forEach((stateName, handle) -> consumer.accept(stateName, handle.get()));
+  void attachStateValues(InvocationBatchRequest.Builder batchBuilder) {
+    for (Map.Entry<String, PersistedValue<byte[]>> managedStateEntry : managedStates.entrySet()) {
+      final ToFunction.PersistedValue.Builder valueBuilder =
+          ToFunction.PersistedValue.newBuilder().setStateName(managedStateEntry.getKey());
+
+      final byte[] stateValue = managedStateEntry.getValue().get();
+      if (stateValue != null) {
+        valueBuilder.setStateValue(ByteString.copyFrom(stateValue));
+      }
+      batchBuilder.addState(valueBuilder);
+    }
   }
 
-  void setValue(String stateName, byte[] value) {
-    getStateHandleOrThrow(stateName).set(value);
+  void updateStateValues(List<PersistedValueMutation> valueMutations) {
+    for (PersistedValueMutation mutate : valueMutations) {
+      final String stateName = mutate.getStateName();
+      switch (mutate.getMutationType()) {
+        case DELETE:
+          {
+            getStateHandleOrThrow(stateName).clear();
+            break;
+          }
+        case MODIFY:
+          {
+            getStateHandleOrThrow(stateName).set(mutate.getStateValue().toByteArray());
+            break;
+          }
+        case UNRECOGNIZED:
+          {
+            break;
+          }
+        default:
+          throw new IllegalStateException("Unexpected value: " + mutate.getMutationType());
+      }
+    }
   }
 
-  void clearValue(String stateName) {
-    getStateHandleOrThrow(stateName).clear();
+  /**
+   * Registers states that were indicated to be missing by remote functions via the remote
+   * invocation protocol.
+   *
+   * <p>A state is registered with the provided specification only if it wasn't registered already
+   * under the same name (identified by {@link PersistedValueSpec#getStateName()}). This means that
+   * you cannot change the specifications of an already registered state name, e.g. state TTL
+   * expiration configuration cannot be changed.
+   *
+   * @param protocolPersistedValueSpecs list of specifications for the indicated missing states.
+   */
+  void registerStates(List<PersistedValueSpec> protocolPersistedValueSpecs) {
+    protocolPersistedValueSpecs.forEach(this::createAndRegisterValueStateIfAbsent);
   }
 
-  private PersistedValue<byte[]> createStateHandle(StateSpec stateSpec) {
+  private void createAndRegisterValueStateIfAbsent(PersistedValueSpec protocolPersistedValueSpec) {
+    final String stateName = protocolPersistedValueSpec.getStateName();
+
+    if (!managedStates.containsKey(stateName)) {
+      final PersistedValue<byte[]> stateValue =
+          PersistedValue.of(
+              stateName,
+              byte[].class,
+              sdkTtlExpiration(protocolPersistedValueSpec.getExpirationSpec()));
+      stateRegistry.registerValue(stateValue);
+      managedStates.put(stateName, stateValue);
+    }
+  }
+
+  private static Expiration sdkTtlExpiration(ExpirationSpec protocolExpirationSpec) {
+    final long expirationTtlMillis = protocolExpirationSpec.getExpireAfterMillis();
+
+    switch (protocolExpirationSpec.getMode()) {
+      case AFTER_INVOKE:
+        return Expiration.expireAfterReadingOrWriting(Duration.ofMillis(expirationTtlMillis));
+      case AFTER_WRITE:
+        return Expiration.expireAfterWriting(Duration.ofMillis(expirationTtlMillis));
+      default:
+      case NONE:
+        return Expiration.none();
+    }
+  }
+
+  private void createAndRegisterEagerValueState(StateSpec stateSpec) {
     final String stateName = stateSpec.name();
-    final Duration stateTtlDuration = stateSpec.ttlDuration();
-    final Expiration stateExpirationConfig =
-        (stateTtlDuration.equals(Duration.ZERO))
-            ? Expiration.none()
-            : Expiration.expireAfterReadingOrWriting(stateTtlDuration);
 
-    return stateRegistry.registerValue(stateName, byte[].class, stateExpirationConfig);
+    final PersistedValue<byte[]> stateValue =
+        PersistedValue.of(stateName, byte[].class, stateSpec.ttlExpiration());
+    stateRegistry.registerValue(stateValue);
+    managedStates.put(stateName, stateValue);
   }
 
   private PersistedValue<byte[]> getStateHandleOrThrow(String stateName) {
     final PersistedValue<byte[]> handle = managedStates.get(stateName);
     if (handle == null) {
       throw new IllegalStateException(
-          "Accessing a non-existing remote function state: " + stateName);
+          "Accessing a non-existing function state: "
+              + stateName
+              + ". This can happen if you forgot to declare this state using the language SDKs.");
     }
     return handle;
   }

@@ -21,8 +21,6 @@ import static org.apache.flink.configuration.description.TextElement.code;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -32,6 +30,7 @@ import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.description.Description;
+import org.apache.flink.statefun.flink.core.message.MessageFactoryKey;
 import org.apache.flink.statefun.flink.core.message.MessageFactoryType;
 import org.apache.flink.statefun.sdk.spi.StatefulFunctionModule;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -74,6 +73,13 @@ public class StatefulFunctionsConfig implements Serializable {
           .defaultValue(MessageFactoryType.WITH_PROTOBUF_PAYLOADS)
           .withDescription("The serializer to use for on the wire messages.");
 
+  public static final ConfigOption<String> USER_MESSAGE_CUSTOM_PAYLOAD_SERIALIZER_CLASS =
+      ConfigOptions.key("statefun.message.custom-payload-serializer-class")
+          .stringType()
+          .noDefaultValue()
+          .withDescription(
+              "The custom payload serializer class to use with the WITH_CUSTOM_PAYLOADS serializer, which must implement MessagePayloadSerializer.");
+
   public static final ConfigOption<String> FLINK_JOB_NAME =
       ConfigOptions.key("statefun.flink-job-name")
           .stringType()
@@ -90,39 +96,26 @@ public class StatefulFunctionsConfig implements Serializable {
   public static final ConfigOption<Integer> ASYNC_MAX_OPERATIONS_PER_TASK =
       ConfigOptions.key("statefun.async.max-per-task")
           .intType()
-          .defaultValue(10_000_000)
+          .defaultValue(1024)
           .withDescription(
               "The max number of async operations per task before backpressure is applied.");
-
-  public static final ConfigOption<Boolean> MIGRATE_LEGACY_REMOTE_FN_STATE =
-      ConfigOptions.key("statefun.remote.migrate-legacy-state")
-          .booleanType()
-          .defaultValue(false)
-          .withDescription(
-              "Indicates whether or not legacy remote function state should be migrated. This should be true only if you are restoring from a savepoint taken with version <= 2.1.x.");
 
   /**
    * Creates a new {@link StatefulFunctionsConfig} based on the default configurations in the
    * current environment set via the {@code flink-conf.yaml}.
    */
   public static StatefulFunctionsConfig fromEnvironment(StreamExecutionEnvironment env) {
-    Configuration configuration = getConfiguration(env);
+    Configuration configuration = FlinkConfigExtractor.reflectivelyExtractFromEnv(env);
     return new StatefulFunctionsConfig(configuration);
   }
 
-  private static Configuration getConfiguration(StreamExecutionEnvironment env) {
-    try {
-      Method getConfiguration =
-          StreamExecutionEnvironment.class.getDeclaredMethod("getConfiguration");
-      getConfiguration.setAccessible(true);
-      return (Configuration) getConfiguration.invoke(env);
-    } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
-      throw new RuntimeException(
-          "Failed to acquire the Flink configuration from the current environment", e);
-    }
+  public static StatefulFunctionsConfig fromFlinkConfiguration(Configuration flinkConfiguration) {
+    return new StatefulFunctionsConfig(flinkConfiguration);
   }
 
   private MessageFactoryType factoryType;
+
+  private String customPayloadSerializerClassName;
 
   private String flinkJobName;
 
@@ -132,8 +125,6 @@ public class StatefulFunctionsConfig implements Serializable {
 
   private int maxAsyncOperationsPerTask;
 
-  private boolean migrateLegacyRemoteFunctionState;
-
   private Map<String, String> globalConfigurations = new HashMap<>();
 
   /**
@@ -141,14 +132,13 @@ public class StatefulFunctionsConfig implements Serializable {
    *
    * @param configuration a configuration to read the values from
    */
-  public StatefulFunctionsConfig(Configuration configuration) {
-    StatefulFunctionsConfigValidator.validate(configuration);
-
+  private StatefulFunctionsConfig(Configuration configuration) {
     this.factoryType = configuration.get(USER_MESSAGE_SERIALIZER);
+    this.customPayloadSerializerClassName =
+        configuration.get(USER_MESSAGE_CUSTOM_PAYLOAD_SERIALIZER_CLASS);
     this.flinkJobName = configuration.get(FLINK_JOB_NAME);
     this.feedbackBufferSize = configuration.get(TOTAL_MEMORY_USED_FOR_FEEDBACK_CHECKPOINTING);
     this.maxAsyncOperationsPerTask = configuration.get(ASYNC_MAX_OPERATIONS_PER_TASK);
-    this.migrateLegacyRemoteFunctionState = configuration.get(MIGRATE_LEGACY_REMOTE_FN_STATE);
 
     for (String key : configuration.keySet()) {
       if (key.startsWith(MODULE_CONFIG_PREFIX)) {
@@ -164,9 +154,26 @@ public class StatefulFunctionsConfig implements Serializable {
     return factoryType;
   }
 
+  /**
+   * Returns the custom payload serializer class name, when factory type is WITH_CUSTOM_PAYLOADS *
+   */
+  public String getCustomPayloadSerializerClassName() {
+    return customPayloadSerializerClassName;
+  }
+
+  /** Returns the factory key * */
+  public MessageFactoryKey getFactoryKey() {
+    return MessageFactoryKey.forType(this.factoryType, this.customPayloadSerializerClassName);
+  }
+
   /** Sets the factory type used to serialize messages. */
   public void setFactoryType(MessageFactoryType factoryType) {
     this.factoryType = Objects.requireNonNull(factoryType);
+  }
+
+  /** Sets the custom payload serializer class name * */
+  public void setCustomPayloadSerializerClassName(String customPayloadSerializerClassName) {
+    this.customPayloadSerializerClassName = customPayloadSerializerClassName;
   }
 
   /** Returns the Flink job name that appears in the Web UI. */
@@ -197,11 +204,6 @@ public class StatefulFunctionsConfig implements Serializable {
   /** Sets the max async operations allowed per task. */
   public void setMaxAsyncOperationsPerTask(int maxAsyncOperationsPerTask) {
     this.maxAsyncOperationsPerTask = maxAsyncOperationsPerTask;
-  }
-
-  /** Flag indicating whether or not legacy remote function state should be migrated. */
-  public boolean shouldMigrateLegacyRemoteFnState() {
-    return this.migrateLegacyRemoteFunctionState;
   }
 
   /**

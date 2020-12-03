@@ -20,48 +20,75 @@ from datetime import timedelta
 from google.protobuf.any_pb2 import Any
 
 from statefun.core import SdkAddress
-from statefun.core import StatefulFunction
+from statefun.core import Expiration
 from statefun.core import AnyStateHandle
 from statefun.core import parse_typename
+from statefun.core import StateRegistrationError
 
 # generated function protocol
 from statefun.request_reply_pb2 import FromFunction
 from statefun.request_reply_pb2 import ToFunction
 
 
-class RequestReplyHandler:
+class InvocationContext:
     def __init__(self, functions):
         self.functions = functions
+        self.missing_state_specs = None
+        self.batch = None
+        self.context = None
+        self.target_function = None
 
-    def __call__(self, request_bytes):
-        request = ToFunction()
-        request.ParseFromString(request_bytes)
-        reply = self.handle_invocation(request)
-        return reply.SerializeToString()
-
-    def handle_invocation(self, to_function):
+    def setup(self, request_bytes):
+        to_function = ToFunction()
+        to_function.ParseFromString(request_bytes)
         #
         # setup
         #
-        context = BatchContext(to_function.invocation.target, to_function.invocation.state)
-        target_function = self.functions.for_type(context.address.namespace, context.address.type)
+        target_address = to_function.invocation.target
+        target_function = self.functions.for_type(target_address.namespace, target_address.type)
         if target_function is None:
             raise ValueError("Unable to find a function of type ", target_function)
-        #
-        # process the batch
-        #
-        batch = to_function.invocation.invocations
-        self.invoke_batch(batch, context, target_function)
-        #
-        # prepare an invocation result that represents the batch
-        #
+
+        # for each state spec defined in target function
+        #    if state name is in request -> add to Batch Context
+        #    if state name is not in request -> add to missing_state_specs
+        provided_state_values = self.provided_state_values(to_function)
+        missing_state_specs = []
+        resolved_state_values = {}
+        for state_name, state_spec in target_function.registered_state_specs.items():
+            if state_name in provided_state_values:
+                resolved_state_values[state_name] = provided_state_values[state_name]
+            else:
+                missing_state_specs.append(state_spec)
+
+        self.batch = to_function.invocation.invocations
+        self.context = BatchContext(target_address, resolved_state_values)
+        self.target_function = target_function
+        if missing_state_specs:
+            self.missing_state_specs = missing_state_specs
+
+    def complete(self):
         from_function = FromFunction()
-        invocation_result = from_function.invocation_result
-        self.add_mutations(context, invocation_result)
-        self.add_outgoing_messages(context, invocation_result)
-        self.add_delayed_messages(context, invocation_result)
-        self.add_egress(context, invocation_result)
-        return from_function
+        if not self.missing_state_specs:
+            invocation_result = from_function.invocation_result
+            context = self.context
+            self.add_mutations(context, invocation_result)
+            self.add_outgoing_messages(context, invocation_result)
+            self.add_delayed_messages(context, invocation_result)
+            self.add_egress(context, invocation_result)
+            # reset the state for the next invocation
+            self.batch = None
+            self.context = None
+            self.target_function = None
+            # return the result
+        else:
+            incomplete_context = from_function.incomplete_invocation_context
+            self.add_missing_state_specs(self.missing_state_specs, incomplete_context)
+        return from_function.SerializeToString()
+
+    @staticmethod
+    def provided_state_values(to_function):
+        return {s.state_name: AnyStateHandle(s.state_value) for s in to_function.invocation.state}
 
     @staticmethod
     def add_outgoing_messages(context, invocation_result):
@@ -90,17 +117,6 @@ class RequestReplyHandler:
                 mutation.state_value = handle.bytes()
 
     @staticmethod
-    def invoke_batch(batch, context, target_function: StatefulFunction):
-        fun = target_function.func
-        for invocation in batch:
-            context.prepare(invocation)
-            unpacked = target_function.unpack_any(invocation.argument)
-            if not unpacked:
-                fun(context, invocation.argument)
-            else:
-                fun(context, unpacked)
-
-    @staticmethod
     def add_delayed_messages(context, invocation_result):
         delayed_invocations = invocation_result.delayed_invocations
         for delay, typename, id, message in context.delayed_messages:
@@ -124,11 +140,83 @@ class RequestReplyHandler:
             outgoing.egress_type = type
             outgoing.argument.CopyFrom(message)
 
+    @staticmethod
+    def add_missing_state_specs(missing_state_specs, incomplete_context_response):
+        missing_values = incomplete_context_response.missing_values
+        for state_spec in missing_state_specs:
+            missing_value = missing_values.add()
+            missing_value.state_name = state_spec.name
+
+            protocol_expiration_spec = FromFunction.ExpirationSpec()
+            sdk_expiration_spec = state_spec.expiration
+            if not sdk_expiration_spec:
+                protocol_expiration_spec.mode = FromFunction.ExpirationSpec.ExpireMode.NONE
+            else:
+                protocol_expiration_spec.expire_after_millis = sdk_expiration_spec.expire_after_millis
+                if sdk_expiration_spec.expire_mode is Expiration.Mode.AFTER_INVOKE:
+                    protocol_expiration_spec.mode = FromFunction.ExpirationSpec.ExpireMode.AFTER_INVOKE
+                elif sdk_expiration_spec.expire_mode is Expiration.Mode.AFTER_WRITE:
+                    protocol_expiration_spec.mode = FromFunction.ExpirationSpec.ExpireMode.AFTER_WRITE
+                else:
+                    raise ValueError("Unexpected state expiration mode.")
+            missing_value.expiration_spec.CopyFrom(protocol_expiration_spec)
+
+
+class RequestReplyHandler:
+    def __init__(self, functions):
+        self.functions = functions
+
+    def __call__(self, request_bytes):
+        ic = InvocationContext(self.functions)
+        ic.setup(request_bytes)
+        if not ic.missing_state_specs:
+            self.handle_invocation(ic)
+        return ic.complete()
+
+    @staticmethod
+    def handle_invocation(ic: InvocationContext):
+        batch = ic.batch
+        context = ic.context
+        target_function = ic.target_function
+        fun = target_function.func
+        for invocation in batch:
+            context.prepare(invocation)
+            unpacked = target_function.unpack_any(invocation.argument)
+            if not unpacked:
+                fun(context, invocation.argument)
+            else:
+                fun(context, unpacked)
+
+
+class AsyncRequestReplyHandler:
+    def __init__(self, functions):
+        self.functions = functions
+
+    async def __call__(self, request_bytes):
+        ic = InvocationContext(self.functions)
+        ic.setup(request_bytes)
+        if not ic.missing_state_specs:
+            await self.handle_invocation(ic)
+        return ic.complete()
+
+    @staticmethod
+    async def handle_invocation(ic: InvocationContext):
+        batch = ic.batch
+        context = ic.context
+        target_function = ic.target_function
+        fun = target_function.func
+        for invocation in batch:
+            context.prepare(invocation)
+            unpacked = target_function.unpack_any(invocation.argument)
+            if not unpacked:
+                await fun(context, invocation.argument)
+            else:
+                await fun(context, unpacked)
+
 
 class BatchContext(object):
     def __init__(self, target, states):
-        # populate the state store with the eager state values provided in the batch
-        self.states = {s.state_name: AnyStateHandle(s.state_value) for s in states}
+        self.states = states
         # remember own address
         self.address = SdkAddress(target.namespace, target.type, target.id)
         # the caller address would be set for each individual invocation in the batch
@@ -152,7 +240,8 @@ class BatchContext(object):
 
     def state(self, name):
         if name not in self.states:
-            raise KeyError('unknown state name ' + name + ', states needed to be explicitly registered in module.yaml')
+            raise StateRegistrationError(
+                'unknown state name ' + name + '; states need to be explicitly registered when binding functions.')
         return self.states[name]
 
     def __getitem__(self, name):

@@ -1,8 +1,16 @@
 # Apache Flink Stateful Functions
 
-Stateful Functions is an [Apache Flink](https://flink.apache.org/) library that **simplifies building distributed stateful applications**. It's based on functions with persistent state that can interact dynamically with strong consistency guarantees.
+Stateful Functions is an API that simplifies the building of **distributed stateful applications** with a **runtime built for serverless architectures**.
+It brings together the benefits of stateful stream processing - the processing of large datasets with low latency and bounded resource constraints -
+along with a runtime for modeling stateful entities that supports location transparency, concurrency, scaling, and resiliency. 
 
-Stateful Functions makes it possible to combine a powerful approach to state and composition with the elasticity, rapid scaling/scale-to-zero and rolling upgrade capabilities of FaaS implementations like AWS Lambda and modern resource orchestration frameworks like Kubernetes. With these features, it addresses [two of the most cited shortcomings](https://www2.eecs.berkeley.edu/Pubs/TechRpts/2019/EECS-2019-3.pdf) of many FaaS setups today: consistent state and efficient messaging between functions.
+<img alt="Stateful Functions Architecture" width="80%" src="../docs/fig/concepts/arch_overview.svg">
+
+It is designed to work with modern architectures, like cloud-native deployments and popular event-driven FaaS platforms 
+like AWS Lambda and KNative, and to provide out-of-the-box consistent state and messaging while preserving the serverless
+experience and elasticity of these platforms.
+
+Stateful Functions is developed under the umbrella of [Apache Flink](https://flink.apache.org/).
 
 This README is meant as a brief walkthrough on the StateFun Python SDK and how to set things up
 to get yourself started with Stateful Functions in Python.
@@ -32,7 +40,7 @@ The JVM-based Stateful Functions implementation has a `RequestReply` extension (
 #### Define and Declare a Function
 
 ```
-from statefun import StatefulFunctions
+from statefun import StatefulFunctions, StateSpec
 
 functions = StatefulFunctions()
 
@@ -41,7 +49,29 @@ def greet(context, message: LoginEvent):
     print("Hey " + message.user_name)
 ```
 
-This code declares a function with a `FunctionType("demo", "greeter")` and binds the greet Python instance to it.
+This code declares a function with of type `FunctionType("demo", "greeter")` and binds it to the instance.
+
+#### Registering and accessing persisted state
+
+You can register persistent state that will be managed by the Stateful Functions workers
+for state consistency and fault-tolerance. The state values could be absent (`None` or a `google.protobuf.Any`) and
+they can be generally obtained via the context parameter:
+
+```
+from statefun import StatefulFunctions, StateSpec
+
+functions = StatefulFunctions()
+
+@functions.bind(
+    typename="demo/greeter",
+    states=[StateSpec('session')])
+def greet(context, message: LoginEvent):
+    session = context['session']
+    if not session:
+       session = start_session(message)
+       context['session'] = session
+    ...
+```
 
 #### Expose with a Request Reply Handler
 
@@ -82,26 +112,6 @@ functions:
       type: demo/greeter
     spec:
       endpoint: http://<end point url>/statefun
-      states:
-        - foo
-        - bar
-        - baz
-```
-
-#### Eager State Registration
-
-The request reply protocol requires that the state names would be registered in the module YAML file
-under the `states` section (see the example above). The state values could be absent (`None` or a `google.protobuf.Any`) and they can be generally obtained via the context parameter:
-
-```
-@functions.bind("demo/greeter")
-def greet(context, message: LoginEvent):
-    session = context['session']
-    if not session:
-       session = start_session(message)
-       context['session'] = session
-    ...
-
 ```
 
 ### Testing

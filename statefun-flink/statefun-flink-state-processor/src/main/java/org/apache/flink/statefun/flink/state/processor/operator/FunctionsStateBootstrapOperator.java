@@ -20,10 +20,10 @@ package org.apache.flink.statefun.flink.state.processor.operator;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.state.KeyedStateBackend;
-import org.apache.flink.runtime.state.StateInitializationContext;
 import org.apache.flink.state.api.output.SnapshotUtils;
 import org.apache.flink.state.api.output.TaggedOperatorSubtaskState;
 import org.apache.flink.statefun.flink.core.functions.FunctionGroupOperator;
+import org.apache.flink.statefun.flink.core.message.MessageFactoryKey;
 import org.apache.flink.statefun.flink.core.message.MessageFactoryType;
 import org.apache.flink.statefun.flink.core.state.FlinkState;
 import org.apache.flink.statefun.flink.core.state.State;
@@ -60,11 +60,12 @@ public final class FunctionsStateBootstrapOperator
   }
 
   @Override
-  public void initializeState(StateInitializationContext context) throws Exception {
-    super.initializeState(context);
-
-    final State stateAccessor = createStateAccessor(getRuntimeContext(), getKeyedStateBackend());
-    this.stateBootstrapper = new StateBootstrapper(stateBootstrapFunctionRegistry, stateAccessor);
+  public void open() throws Exception {
+    super.open();
+    if (this.stateBootstrapper == null) {
+      final State stateAccessor = createStateAccessor(getRuntimeContext(), getKeyedStateBackend());
+      this.stateBootstrapper = new StateBootstrapper(stateBootstrapFunctionRegistry, stateAccessor);
+    }
   }
 
   @Override
@@ -95,6 +96,7 @@ public final class FunctionsStateBootstrapOperator
         runtimeContext,
         keyedStateBackend,
         new DynamicallyRegisteredTypes(
-            new StaticallyRegisteredTypes(MessageFactoryType.WITH_RAW_PAYLOADS)));
+            new StaticallyRegisteredTypes(
+                MessageFactoryKey.forType(MessageFactoryType.WITH_RAW_PAYLOADS, null))));
   }
 }

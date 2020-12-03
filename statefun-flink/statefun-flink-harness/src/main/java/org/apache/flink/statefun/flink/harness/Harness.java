@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Objects;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
+import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.statefun.flink.core.StatefulFunctionsConfig;
 import org.apache.flink.statefun.flink.core.StatefulFunctionsConfigValidator;
 import org.apache.flink.statefun.flink.core.StatefulFunctionsJob;
@@ -102,6 +103,12 @@ public class Harness {
     return this;
   }
 
+  /** Set the desired parallelism. */
+  public Harness withParallelism(int parallelism) {
+    flinkConfig.setInteger(CoreOptions.DEFAULT_PARALLELISM, parallelism);
+    return this;
+  }
+
   /**
    * Sets a global configuration available in the {@link
    * org.apache.flink.statefun.sdk.spi.StatefulFunctionModule} on configure.
@@ -111,19 +118,38 @@ public class Harness {
     return this;
   }
 
-  public void start() throws Exception {
-    StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+  /** Sets the path to the savepoint location to restore from, when this harness starts. */
+  public Harness withSavepointLocation(String savepointLocation) {
+    Objects.requireNonNull(savepointLocation);
+    flinkConfig.set(SavepointConfigOptions.SAVEPOINT_PATH, savepointLocation);
+    return this;
+  }
 
+  public void start() throws Exception {
     configureStrictlyRequiredFlinkConfigs(flinkConfig);
+    final int parallelism = getParallelism(flinkConfig);
+    StreamExecutionEnvironment env =
+        StreamExecutionEnvironment.createLocalEnvironment(parallelism, flinkConfig);
     // Configure will change the value of a setting only if a corresponding option was set in the
     // underlying configuration. If a key is not present, the current value of a field will remain
     // untouched.
     env.configure(flinkConfig, Thread.currentThread().getContextClassLoader());
 
-    StatefulFunctionsConfig stateFunConfig = new StatefulFunctionsConfig(flinkConfig);
+    StatefulFunctionsConfig stateFunConfig =
+        StatefulFunctionsConfig.fromFlinkConfiguration(flinkConfig);
     stateFunConfig.addAllGlobalConfigurations(globalConfigurations);
     stateFunConfig.setProvider(new HarnessProvider(overrideIngress, overrideEgress));
     StatefulFunctionsJob.main(env, stateFunConfig);
+  }
+
+  private static int getParallelism(Configuration config) {
+    final int parallelism;
+    if (config.contains(CoreOptions.DEFAULT_PARALLELISM)) {
+      parallelism = config.getInteger(CoreOptions.DEFAULT_PARALLELISM);
+    } else {
+      parallelism = Runtime.getRuntime().availableProcessors();
+    }
+    return parallelism;
   }
 
   private static final class HarnessProvider implements StatefulFunctionsUniverseProvider {

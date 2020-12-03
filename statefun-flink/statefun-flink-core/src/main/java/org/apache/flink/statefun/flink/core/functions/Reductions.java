@@ -32,10 +32,12 @@ import org.apache.flink.statefun.flink.core.di.Lazy;
 import org.apache.flink.statefun.flink.core.di.ObjectContainer;
 import org.apache.flink.statefun.flink.core.message.Message;
 import org.apache.flink.statefun.flink.core.message.MessageFactory;
-import org.apache.flink.statefun.flink.core.metrics.FlinkMetricsFactory;
-import org.apache.flink.statefun.flink.core.metrics.MetricsFactory;
+import org.apache.flink.statefun.flink.core.metrics.FlinkFuncionTypeMetricsFactory;
+import org.apache.flink.statefun.flink.core.metrics.FlinkFunctionDispatcherMetrics;
+import org.apache.flink.statefun.flink.core.metrics.FuncionTypeMetricsFactory;
+import org.apache.flink.statefun.flink.core.metrics.FunctionDispatcherMetrics;
+import org.apache.flink.statefun.flink.core.metrics.FunctionTypeMetricsRepository;
 import org.apache.flink.statefun.flink.core.state.FlinkState;
-import org.apache.flink.statefun.flink.core.state.FlinkStateBinder;
 import org.apache.flink.statefun.flink.core.state.State;
 import org.apache.flink.statefun.flink.core.types.DynamicallyRegisteredTypes;
 import org.apache.flink.statefun.sdk.io.EgressIdentifier;
@@ -72,6 +74,11 @@ final class Reductions {
     container.add("function-providers", Map.class, statefulFunctionsUniverse.functions());
     container.add(
         "function-repository", FunctionRepository.class, StatefulFunctionRepository.class);
+    container.addAlias(
+        "function-metrics-repository",
+        FunctionTypeMetricsRepository.class,
+        "function-repository",
+        FunctionRepository.class);
 
     // for FlinkState
     container.add("runtime-context", RuntimeContext.class, context);
@@ -94,10 +101,16 @@ final class Reductions {
     container.add("applying-context", ApplyingContext.class, ReusableContext.class);
     container.add(LocalSink.class);
     container.add("function-loader", FunctionLoader.class, PredefinedFunctionLoader.class);
-    container.add(FlinkStateBinder.class);
     container.add(Reductions.class);
     container.add(LocalFunctionGroup.class);
-    container.add("metrics-factory", MetricsFactory.class, new FlinkMetricsFactory(metricGroup));
+    container.add(
+        "function-metrics-factory",
+        FuncionTypeMetricsFactory.class,
+        new FlinkFuncionTypeMetricsFactory(metricGroup));
+    container.add(
+        "function-dispatcher-metrics",
+        FunctionDispatcherMetrics.class,
+        new FlinkFunctionDispatcherMetrics(metricGroup));
 
     // for delayed messages
     container.add(

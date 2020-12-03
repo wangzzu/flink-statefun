@@ -23,29 +23,32 @@ import org.apache.flink.statefun.flink.common.SetContextClassLoader;
 import org.apache.flink.statefun.flink.core.di.Inject;
 import org.apache.flink.statefun.flink.core.di.Label;
 import org.apache.flink.statefun.flink.core.message.MessageFactory;
+import org.apache.flink.statefun.flink.core.metrics.FuncionTypeMetricsFactory;
 import org.apache.flink.statefun.flink.core.metrics.FunctionTypeMetrics;
-import org.apache.flink.statefun.flink.core.metrics.MetricsFactory;
+import org.apache.flink.statefun.flink.core.metrics.FunctionTypeMetricsRepository;
 import org.apache.flink.statefun.flink.core.state.FlinkStateBinder;
 import org.apache.flink.statefun.flink.core.state.PersistedStates;
+import org.apache.flink.statefun.flink.core.state.State;
 import org.apache.flink.statefun.sdk.FunctionType;
 
-final class StatefulFunctionRepository implements FunctionRepository {
+final class StatefulFunctionRepository
+    implements FunctionRepository, FunctionTypeMetricsRepository {
   private final ObjectOpenHashMap<FunctionType, StatefulFunction> instances;
-  private final FlinkStateBinder stateBinder;
+  private final State flinkState;
   private final FunctionLoader functionLoader;
-  private final MetricsFactory metricsFactory;
+  private final FuncionTypeMetricsFactory metricsFactory;
   private final MessageFactory messageFactory;
 
   @Inject
   StatefulFunctionRepository(
       @Label("function-loader") FunctionLoader functionLoader,
-      @Label("metrics-factory") MetricsFactory metricsFactory,
-      MessageFactory messageFactory,
-      FlinkStateBinder stateBinder) {
+      @Label("function-metrics-factory") FuncionTypeMetricsFactory functionMetricsFactory,
+      @Label("state") State state,
+      MessageFactory messageFactory) {
     this.instances = new ObjectOpenHashMap<>();
-    this.stateBinder = Objects.requireNonNull(stateBinder);
     this.functionLoader = Objects.requireNonNull(functionLoader);
-    this.metricsFactory = Objects.requireNonNull(metricsFactory);
+    this.metricsFactory = Objects.requireNonNull(functionMetricsFactory);
+    this.flinkState = Objects.requireNonNull(state);
     this.messageFactory = Objects.requireNonNull(messageFactory);
   }
 
@@ -58,11 +61,17 @@ final class StatefulFunctionRepository implements FunctionRepository {
     return function;
   }
 
+  @Override
+  public FunctionTypeMetrics getMetrics(FunctionType functionType) {
+    return get(functionType).metrics();
+  }
+
   private StatefulFunction load(FunctionType functionType) {
     org.apache.flink.statefun.sdk.StatefulFunction statefulFunction =
         functionLoader.load(functionType);
     try (SetContextClassLoader ignored = new SetContextClassLoader(statefulFunction)) {
-      PersistedStates.findAndBind(functionType, statefulFunction, stateBinder);
+      FlinkStateBinder stateBinderForType = new FlinkStateBinder(flinkState, functionType);
+      PersistedStates.findReflectivelyAndBind(statefulFunction, stateBinderForType);
       FunctionTypeMetrics metrics = metricsFactory.forType(functionType);
       return new StatefulFunction(statefulFunction, metrics, messageFactory);
     }

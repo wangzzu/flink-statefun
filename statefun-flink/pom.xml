@@ -22,7 +22,7 @@ under the License.
     <parent>
         <artifactId>statefun-parent</artifactId>
         <groupId>org.apache.flink</groupId>
-        <version>2.2-SNAPSHOT</version>
+        <version>2.3-SNAPSHOT</version>
         <relativePath>..</relativePath>
     </parent>
 
@@ -39,10 +39,10 @@ under the License.
         <module>statefun-flink-distribution</module>
         <module>statefun-flink-harness</module>
         <module>statefun-flink-state-processor</module>
+        <module>statefun-flink-datastream</module>
     </modules>
 
     <properties>
-        <scala.binary.version>2.11</scala.binary.version>
         <jsr305.version>3.0.2</jsr305.version>
         <jmh.version>1.21</jmh.version>
         <jsr305-version>1.3.9</jsr305-version>
@@ -81,6 +81,21 @@ under the License.
                     </exclusion>
                     <!-- 
                     Conflicts with the common slf4j-api version that used almost uniformly in Flink. 
+                    -->
+                    <exclusion>
+                        <groupId>org.slf4j</groupId>
+                        <artifactId>slf4j-api</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.flink</groupId>
+                <artifactId>flink-metrics-dropwizard</artifactId>
+                <version>${flink.version}</version>
+                <exclusions>
+                    <!--
+                    This artifact transitively depends on different versions of slf4j-api. 
+                    To see the complete list, comment this exclusion run mvn enforcer:enforce.
                     -->
                     <exclusion>
                         <groupId>org.slf4j</groupId>

@@ -1,7 +1,7 @@
 ---
 title: Java SDK 
 nav-id: java-sdk
-nav-pos: 1
+nav-pos: 2
 nav-title: Java
 nav-parent_id: sdk
 ---
@@ -27,7 +27,7 @@ under the License.
 Stateful functions are the building blocks of applications; they are atomic units of isolation, distribution, and persistence.
 As objects, they encapsulate the state of a single entity (e.g., a specific user, device, or session) and encode its behavior.
 Stateful functions can interact with each other, and external systems, through message passing.
-The Java SDK is supported as an [embedded module]({{ site.baseurl }}/sdk/modules.html#embedded-module).
+The Java SDK is supported as an [embedded module]({{ site.baseurl }}/sdk/index.html#embedded-module).
 
 To get started, add the Java SDK as a dependency to your application.
 
@@ -163,7 +163,7 @@ Finally, if a catch-all exists, it will be executed or an ``IllegalStateExceptio
 ## Function Types and Messaging
 
 In Java, function types are defined as logical pointers composed of a namespace and name.
-The type is bound to the implementing class in the [module]({{ site.baseurl }}/sdk/modules.html#embedded-module) definition.
+The type is bound to the implementing class in the [module]({{ site.baseurl }}/sdk/index.html#embedded-module) definition.
 Below is an example function type for the hello world function.
 
 {% highlight java %}
@@ -364,6 +364,43 @@ PersistedTable<String, Integer> table = PersistedTable.of("my-table", String.cla
 PersistedAppendingBuffer<Integer> buffer = PersistedAppendingBuffer.of("my-buffer", Integer.class);
 {% endhighlight %}
 
+### Dynamic State Registration
+
+Using the above state types, a function's persisted state must be defined eagerly. You cannot use those state types to
+register a new persisted state during invocations (i.e., in the ``invoke`` method) or after the function instance is created.
+
+If dynamic state registration is required, it can be achieved using a ``PersistedStateRegistry``:
+
+{% highlight java %}
+import org.apache.flink.statefun.sdk.Context;
+import org.apache.flink.statefun.sdk.FunctionType;
+import org.apache.flink.statefun.sdk.StatefulFunction;
+import org.apache.flink.statefun.sdk.annotations.Persisted;
+import org.apache.flink.statefun.sdk.state.PersistedStateRegistry;
+import org.apache.flink.statefun.sdk.state.PersistedValue;
+
+public class MyFunction implements StatefulFunction {
+
+	@Persisted
+	private final PersistedStateRegistry registry = new PersistedStateRegistry();
+
+	private PersistedValue<Integer> value;
+
+	public void invoke(Context context, Object input) {
+		if (value == null) {
+			value = PersistedValue.of("my-value", Integer.class);
+			registry.registerValue(value);
+		}
+		int count = value.getOrDefault(0);
+		// ...
+	}
+}
+{% endhighlight %}
+
+Note how the ``PersistedValue`` field doesn't need to be annotated with the ``@Persisted`` annotations, and is initially
+empty. The state object is dynamically created during invocation and registered with the ``PersistedStateRegistry`` so
+that the system picks it up to be managed for fault-tolerance.
+
 ### State Expiration
 
 Persisted states may be configured to expire and be deleted after a specified duration.
@@ -371,7 +408,7 @@ This is supported by all types of state:
 
 {% highlight java %}
 @Persisted
-PersistedValue<Integer> table = PersistedValue.of(
+PersistedValue<Integer> value = PersistedValue.of(
     "my-value",
     Integer.class,
     Expiration.expireAfterWriting(Duration.ofHours(1)));

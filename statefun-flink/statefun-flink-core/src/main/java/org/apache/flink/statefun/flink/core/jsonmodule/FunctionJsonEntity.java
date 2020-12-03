@@ -50,6 +50,7 @@ import org.apache.flink.statefun.flink.core.httpfn.StateSpec;
 import org.apache.flink.statefun.sdk.FunctionType;
 import org.apache.flink.statefun.sdk.StatefulFunctionProvider;
 import org.apache.flink.statefun.sdk.spi.StatefulFunctionModule.Binder;
+import org.apache.flink.statefun.sdk.state.Expiration;
 import org.apache.flink.util.TimeUtils;
 
 final class FunctionJsonEntity implements JsonEntity {
@@ -66,7 +67,15 @@ final class FunctionJsonEntity implements JsonEntity {
     private static final JsonPointer ENDPOINT = JsonPointer.compile("/function/spec/endpoint");
     private static final JsonPointer PORT = JsonPointer.compile("/function/spec/port");
     private static final JsonPointer STATES = JsonPointer.compile("/function/spec/states");
+
     private static final JsonPointer TIMEOUT = JsonPointer.compile("/function/spec/timeout");
+    private static final JsonPointer CONNECT_TIMEOUT =
+        JsonPointer.compile("/function/spec/connectTimeout");
+    private static final JsonPointer READ_TIMEOUT =
+        JsonPointer.compile("/function/spec/readTimeout");
+    private static final JsonPointer WRITE_TIMEOUT =
+        JsonPointer.compile("/function/spec/writeTimeout");
+
     private static final JsonPointer MAX_NUM_BATCH_REQUESTS =
         JsonPointer.compile("/function/spec/maxNumBatchRequests");
   }
@@ -74,6 +83,7 @@ final class FunctionJsonEntity implements JsonEntity {
   private static final class StateSpecPointers {
     private static final JsonPointer NAME = JsonPointer.compile("/name");
     private static final JsonPointer EXPIRE_DURATION = JsonPointer.compile("/expireAfter");
+    private static final JsonPointer EXPIRE_MODE = JsonPointer.compile("/expireMode");
   }
 
   @Override
@@ -118,7 +128,14 @@ final class FunctionJsonEntity implements JsonEntity {
           specBuilder.withState(state);
         }
         optionalMaxNumBatchRequests(functionNode).ifPresent(specBuilder::withMaxNumBatchRequests);
-        optionalMaxRequestDuration(functionNode).ifPresent(specBuilder::withMaxRequestDuration);
+        optionalTimeoutDuration(functionNode, SpecPointers.TIMEOUT)
+            .ifPresent(specBuilder::withMaxRequestDuration);
+        optionalTimeoutDuration(functionNode, SpecPointers.CONNECT_TIMEOUT)
+            .ifPresent(specBuilder::withConnectTimeoutDuration);
+        optionalTimeoutDuration(functionNode, SpecPointers.READ_TIMEOUT)
+            .ifPresent(specBuilder::withReadTimeoutDuration);
+        optionalTimeoutDuration(functionNode, SpecPointers.WRITE_TIMEOUT)
+            .ifPresent(specBuilder::withWriteTimeoutDuration);
 
         return specBuilder.build();
       case GRPC:
@@ -153,13 +170,8 @@ final class FunctionJsonEntity implements JsonEntity {
     stateSpecNodes.forEach(
         stateSpecNode -> {
           final String name = Selectors.textAt(stateSpecNode, StateSpecPointers.NAME);
-          final Optional<Duration> optionalStateExpireDuration =
-              optionalStateExpireDuration(stateSpecNode);
-          if (optionalStateExpireDuration.isPresent()) {
-            stateSpecs.add(new StateSpec(name, optionalStateExpireDuration.get()));
-          } else {
-            stateSpecs.add(new StateSpec(name));
-          }
+          final Expiration expiration = stateTtlExpiration(stateSpecNode);
+          stateSpecs.add(new StateSpec(name, expiration));
         });
     return stateSpecs;
   }
@@ -168,14 +180,35 @@ final class FunctionJsonEntity implements JsonEntity {
     return Selectors.optionalIntegerAt(functionNode, SpecPointers.MAX_NUM_BATCH_REQUESTS);
   }
 
-  private static Optional<Duration> optionalMaxRequestDuration(JsonNode functionNode) {
-    return Selectors.optionalTextAt(functionNode, SpecPointers.TIMEOUT)
-        .map(TimeUtils::parseDuration);
+  private static Optional<Duration> optionalTimeoutDuration(
+      JsonNode functionNode, JsonPointer timeoutPointer) {
+    return Selectors.optionalTextAt(functionNode, timeoutPointer).map(TimeUtils::parseDuration);
   }
 
-  private static Optional<Duration> optionalStateExpireDuration(JsonNode stateSpecNode) {
-    return Selectors.optionalTextAt(stateSpecNode, StateSpecPointers.EXPIRE_DURATION)
-        .map(TimeUtils::parseDuration);
+  private static Expiration stateTtlExpiration(JsonNode stateSpecNode) {
+    final Optional<Duration> duration =
+        Selectors.optionalTextAt(stateSpecNode, StateSpecPointers.EXPIRE_DURATION)
+            .map(TimeUtils::parseDuration);
+
+    if (!duration.isPresent()) {
+      return Expiration.none();
+    }
+
+    final Optional<String> mode =
+        Selectors.optionalTextAt(stateSpecNode, StateSpecPointers.EXPIRE_MODE);
+    if (!mode.isPresent()) {
+      return Expiration.expireAfterReadingOrWriting(duration.get());
+    }
+
+    switch (mode.get()) {
+      case "after-invoke":
+        return Expiration.expireAfterReadingOrWriting(duration.get());
+      case "after-write":
+        return Expiration.expireAfterWriting(duration.get());
+      default:
+        throw new IllegalArgumentException(
+            "Invalid state ttl expire mode; must be one of [after-invoke, after-write].");
+    }
   }
 
   private static FunctionType functionType(JsonNode functionNode) {

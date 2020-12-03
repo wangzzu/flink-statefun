@@ -19,6 +19,7 @@ package org.apache.flink.statefun.flink.core.reqreply;
 
 import static org.apache.flink.statefun.flink.core.TestUtils.FUNCTION_1_ADDR;
 import static org.apache.flink.statefun.flink.core.common.PolyglotUtil.polyglotAddressToSdkAddress;
+import static org.hamcrest.CoreMatchers.hasItems;
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -33,23 +34,29 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import org.apache.flink.statefun.flink.core.TestUtils;
-import org.apache.flink.statefun.flink.core.backpressure.AsyncWaiter;
+import org.apache.flink.statefun.flink.core.backpressure.InternalContext;
 import org.apache.flink.statefun.flink.core.httpfn.StateSpec;
+import org.apache.flink.statefun.flink.core.metrics.FunctionTypeMetrics;
+import org.apache.flink.statefun.flink.core.metrics.RemoteInvocationMetrics;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.DelayedInvocation;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.EgressMessage;
+import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.ExpirationSpec;
+import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.IncompleteInvocationContext;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.InvocationResponse;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.PersistedValueMutation;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.PersistedValueMutation.MutationType;
+import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction.PersistedValueSpec;
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction;
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction.Invocation;
 import org.apache.flink.statefun.sdk.Address;
 import org.apache.flink.statefun.sdk.AsyncOperationResult;
 import org.apache.flink.statefun.sdk.AsyncOperationResult.Status;
-import org.apache.flink.statefun.sdk.Context;
 import org.apache.flink.statefun.sdk.FunctionType;
 import org.apache.flink.statefun.sdk.io.EgressIdentifier;
 import org.junit.Test;
@@ -209,6 +216,63 @@ public class RequestReplyFunctionTest {
         new EgressIdentifier<>("org.foo", "bar", Any.class), context.egresses.get(0).getKey());
   }
 
+  @Test
+  public void retryBatchOnIncompleteInvocationContextResponse() {
+    Any any = Any.pack(TestUtils.DUMMY_PAYLOAD);
+    functionUnderTest.invoke(context, any);
+
+    FromFunction response =
+        FromFunction.newBuilder()
+            .setIncompleteInvocationContext(
+                IncompleteInvocationContext.newBuilder()
+                    .addMissingValues(
+                        PersistedValueSpec.newBuilder()
+                            .setStateName("new-state")
+                            .setExpirationSpec(
+                                ExpirationSpec.newBuilder()
+                                    .setMode(ExpirationSpec.ExpireMode.AFTER_INVOKE)
+                                    .setExpireAfterMillis(5000)
+                                    .build())))
+            .build();
+
+    functionUnderTest.invoke(context, successfulAsyncOperation(client.wasSentToFunction, response));
+
+    // re-sent batch should have identical invocation input messages
+    assertTrue(client.wasSentToFunction.hasInvocation());
+    assertThat(client.capturedInvocationBatchSize(), is(1));
+    assertThat(client.capturedInvocation(0).getArgument(), is(any));
+
+    // re-sent batch should have new state as well as originally registered state
+    assertThat(client.capturedStateNames().size(), is(2));
+    assertThat(client.capturedStateNames(), hasItems("session", "new-state"));
+  }
+
+  @Test
+  public void backlogMetricsIncreasedOnInvoke() {
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    // following should be accounted into backlog metrics
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    assertThat(context.functionTypeMetrics().numBacklog, is(2));
+  }
+
+  @Test
+  public void backlogMetricsDecreasedOnNextSuccess() {
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    // following should be accounted into backlog metrics
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+    functionUnderTest.invoke(context, Any.getDefaultInstance());
+
+    // complete one message, should fully consume backlog
+    context.needsWaiting = false;
+    functionUnderTest.invoke(context, successfulAsyncOperation());
+
+    assertThat(context.functionTypeMetrics().numBacklog, is(0));
+  }
+
   private static AsyncOperationResult<Object, FromFunction> successfulAsyncOperation() {
     return new AsyncOperationResult<>(
         new Object(), Status.SUCCESS, FromFunction.getDefaultInstance(), null);
@@ -219,12 +283,20 @@ public class RequestReplyFunctionTest {
     return new AsyncOperationResult<>(new Object(), Status.SUCCESS, fromFunction, null);
   }
 
+  private static AsyncOperationResult<ToFunction, FromFunction> successfulAsyncOperation(
+      ToFunction toFunction, FromFunction fromFunction) {
+    return new AsyncOperationResult<>(toFunction, Status.SUCCESS, fromFunction, null);
+  }
+
   private static final class FakeClient implements RequestReplyClient {
     ToFunction wasSentToFunction;
     Supplier<FromFunction> fromFunction = FromFunction::getDefaultInstance;
 
     @Override
-    public CompletableFuture<FromFunction> call(ToFunction toFunction) {
+    public CompletableFuture<FromFunction> call(
+        ToFunctionRequestSummary requestSummary,
+        RemoteInvocationMetrics metrics,
+        ToFunction toFunction) {
       this.wasSentToFunction = toFunction;
       try {
         return CompletableFuture.completedFuture(this.fromFunction.get());
@@ -244,12 +316,20 @@ public class RequestReplyFunctionTest {
       return wasSentToFunction.getInvocation().getState(n).getStateValue();
     }
 
+    Set<String> capturedStateNames() {
+      return wasSentToFunction.getInvocation().getStateList().stream()
+          .map(ToFunction.PersistedValue::getStateName)
+          .collect(Collectors.toSet());
+    }
+
     public int capturedInvocationBatchSize() {
       return wasSentToFunction.getInvocation().getInvocationsCount();
     }
   }
 
-  private static final class FakeContext implements Context, AsyncWaiter {
+  private static final class FakeContext implements InternalContext {
+
+    private final BacklogTrackingMetrics fakeMetrics = new BacklogTrackingMetrics();
 
     Address caller;
     boolean needsWaiting;
@@ -261,6 +341,11 @@ public class RequestReplyFunctionTest {
     @Override
     public void awaitAsyncOperationComplete() {
       needsWaiting = true;
+    }
+
+    @Override
+    public BacklogTrackingMetrics functionTypeMetrics() {
+      return fakeMetrics;
     }
 
     @Override
@@ -288,5 +373,54 @@ public class RequestReplyFunctionTest {
 
     @Override
     public <M, T> void registerAsyncOperation(M metadata, CompletableFuture<T> future) {}
+  }
+
+  private static final class BacklogTrackingMetrics implements FunctionTypeMetrics {
+
+    private int numBacklog = 0;
+
+    public int numBacklog() {
+      return numBacklog;
+    }
+
+    @Override
+    public void appendBacklogMessages(int count) {
+      numBacklog += count;
+    }
+
+    @Override
+    public void consumeBacklogMessages(int count) {
+      numBacklog -= count;
+    }
+
+    @Override
+    public void remoteInvocationFailures() {}
+
+    @Override
+    public void remoteInvocationLatency(long elapsed) {}
+
+    @Override
+    public void asyncOperationRegistered() {}
+
+    @Override
+    public void asyncOperationCompleted() {}
+
+    @Override
+    public void incomingMessage() {}
+
+    @Override
+    public void outgoingRemoteMessage() {}
+
+    @Override
+    public void outgoingEgressMessage() {}
+
+    @Override
+    public void outgoingLocalMessage() {}
+
+    @Override
+    public void blockedAddress() {}
+
+    @Override
+    public void unblockedAddress() {}
   }
 }

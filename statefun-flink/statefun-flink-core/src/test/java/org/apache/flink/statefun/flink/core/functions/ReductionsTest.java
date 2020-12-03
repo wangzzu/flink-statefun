@@ -58,6 +58,7 @@ import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Gauge;
 import org.apache.flink.metrics.Meter;
 import org.apache.flink.metrics.MetricGroup;
+import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.state.KeyGroupedInternalPriorityQueue;
 import org.apache.flink.runtime.state.Keyed;
 import org.apache.flink.runtime.state.KeyedStateBackend;
@@ -72,6 +73,7 @@ import org.apache.flink.statefun.flink.core.StatefulFunctionsUniverse;
 import org.apache.flink.statefun.flink.core.TestUtils;
 import org.apache.flink.statefun.flink.core.backpressure.ThresholdBackPressureValve;
 import org.apache.flink.statefun.flink.core.message.Message;
+import org.apache.flink.statefun.flink.core.message.MessageFactoryKey;
 import org.apache.flink.statefun.flink.core.message.MessageFactoryType;
 import org.apache.flink.streaming.api.operators.InternalTimerService;
 import org.apache.flink.streaming.api.operators.Output;
@@ -90,7 +92,8 @@ public class ReductionsTest {
     Reductions reductions =
         Reductions.create(
             new ThresholdBackPressureValve(-1),
-            new StatefulFunctionsUniverse(MessageFactoryType.WITH_KRYO_PAYLOADS),
+            new StatefulFunctionsUniverse(
+                MessageFactoryKey.forType(MessageFactoryType.WITH_KRYO_PAYLOADS, null)),
             new FakeRuntimeContext(),
             new FakeKeyedStateBackend(),
             new FakeTimerServiceFactory(),
@@ -578,7 +581,7 @@ public class ReductionsTest {
 
     @Override
     public Counter counter(String s) {
-      throw new UnsupportedOperationException();
+      return new SimpleCounter();
     }
 
     @Override

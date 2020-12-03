@@ -19,10 +19,14 @@
 package org.apache.flink.statefun.flink.core.reqreply;
 
 import java.util.concurrent.CompletableFuture;
+import org.apache.flink.statefun.flink.core.metrics.RemoteInvocationMetrics;
 import org.apache.flink.statefun.flink.core.polyglot.generated.FromFunction;
 import org.apache.flink.statefun.flink.core.polyglot.generated.ToFunction;
 
 public interface RequestReplyClient {
 
-  CompletableFuture<FromFunction> call(ToFunction toFunction);
+  CompletableFuture<FromFunction> call(
+      ToFunctionRequestSummary requestSummary,
+      RemoteInvocationMetrics metrics,
+      ToFunction toFunction);
 }

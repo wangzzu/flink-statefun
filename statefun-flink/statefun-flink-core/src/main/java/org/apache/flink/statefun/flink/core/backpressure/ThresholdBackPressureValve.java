@@ -43,7 +43,7 @@ public final class ThresholdBackPressureValve implements BackPressureValve {
 
   /**
    * a set of address that had explicitly requested to stop processing any new inputs (via {@link
-   * AsyncWaiter#awaitAsyncOperationComplete()}. Note that this is a set implemented on top of a
+   * InternalContext#awaitAsyncOperationComplete()}. Note that this is a set implemented on top of a
    * map, and the value (Boolean) has no meaning.
    */
   private final ObjectOpenHashMap<Address, Boolean> blockedAddressSet =
@@ -86,6 +86,12 @@ public final class ThresholdBackPressureValve implements BackPressureValve {
     Objects.requireNonNull(owningAddress);
     pendingAsynchronousOperationsCount = Math.max(0, pendingAsynchronousOperationsCount - 1);
     blockedAddressSet.remove(owningAddress);
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  public boolean isAddressBlocked(Address address) {
+    return blockedAddressSet.containsKey(address);
   }
 
   private boolean totalPendingAsyncOperationsAtCapacity() {
