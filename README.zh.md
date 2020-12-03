@@ -31,7 +31,7 @@ Stateful Functions 使我们能够将强大的状态管理与像 AWS Lambda 类�
 
 ### <a name="abstraction"></a>摘要
 
-Stateful Functions 应用程序由以下原语组成：有状态函数，入口（ingresses），路由（routers）和出口（egresses）。
+Stateful Functions 应用程序由以下原语组成：有状态函数，入口（Ingresses），路由（Routers）和出口（Egresses）。
 
 <p align="center">
   <img src="docs/fig/stateful_functions_overview.png" width="650px"/>
